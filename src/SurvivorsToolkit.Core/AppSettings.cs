@@ -52,6 +52,13 @@ public sealed class AppSettings
     public RestartPlan Restarts { get; set; } = new();
     /// <summary>Look for a newer version of the app at start-up.</summary>
     public bool CheckForUpdates { get; set; } = true;
+    /// <summary>
+    /// Download a newer version in the background at start-up and install it when the app closes, without asking.
+    /// Off by default, as in ModWright: the player chooses when the app changes under them.
+    /// </summary>
+    public bool AutoUpdate { get; set; }
+    /// <summary>The version that last ran, so the changes since then can be shown once after an update.</summary>
+    public string LastRunVersion { get; set; } = "";
     /// <summary>The build of the game this PC last saw, so an update to it can be pointed out once.</summary>
     public GameBuild? SeenGameBuild { get; set; }
     /// <summary>The log a crash note has already been shown for ("path|ticks"), so the same crash isn't mentioned twice.</summary>

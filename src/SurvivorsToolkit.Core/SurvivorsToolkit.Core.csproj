@@ -9,6 +9,10 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Shown once after an update ("What's new"), and in full from Options > About. -->
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="SurvivorsToolkit.CHANGELOG.md" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="SurvivorsToolkit.Tests" />
   </ItemGroup>
 </Project>

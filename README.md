@@ -123,11 +123,15 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   are installed, EasyAntiCheat and launch options.
 
 - **Updates:** at start-up the app asks GitHub for a newer release and offers **Update now**, **Release notes** or
-  **Later**, with a box to stop reminding you about that version. **Update now** downloads the new exe, checks it
-  against the release's `SHA256SUMS.txt`, and restarts into it; the old exe is kept as `<name>.update-old` until the
-  next start, and put back if Windows (or antivirus) won't run the new one. Only GitHub's public list of releases is
+  **Later**, with a box to stop reminding you about that version. **Update now** downloads the new exe and checks it
+  against the release's `SHA256SUMS.txt`, then offers **Restart now** or **When I close the app**; until it is
+  installed, a **Restart now** link at the bottom of the window says it is ready. The old exe is kept as
+  `<name>.update-old` until the next start, and put back if Windows (or antivirus) won't run the new one. With
+  **Options > About > Download new versions by themselves** on, a new version is downloaded in the background and
+  installed when you close the app, without asking. After an update the changes since your version are shown once
+  (from `CHANGELOG.md`, built into the app); **What's new** shows them all. Only GitHub's public list of releases is
   read. Turn the check off, or **Check now**, under **Options > About**. Only the single-file exe updates itself; a
-  copy built with `dotnet build` offers the release page instead.
+  copy that can't (a folder it can't write to, or a `dotnet build`) offers **Download** through the browser instead.
 
 Settings, profiles (the `modlists` folder) and backups are in `%LocalAppData%\SurvivorsToolkit`.
 
@@ -168,9 +172,11 @@ window. `Theme.cs` is ModWright's, plus the two Wasteland themes.
 
 ## Releasing
 
-Bump `<Version>` in `Directory.Build.props` on `main`, then run the **Release** workflow
-(Actions tab), optionally with change notes. It tests, publishes `SurvivorsToolkit-<version>-win-x64.exe` and
-`SHA256SUMS.txt`, and creates the release `v<version>`, which is what the app's update check looks for.
+Bump `<Version>` in `Directory.Build.props` on `main` and add a `## <version>` section to `CHANGELOG.md`, then run
+the **Release** workflow (Actions tab), optionally with extra notes. It refuses a version with no changelog section,
+tests, publishes `SurvivorsToolkit-<version>-win-x64.exe` (ReadyToRun, so it starts quickly) and `SHA256SUMS.txt`,
+and creates the release `v<version>` with that section as its notes, which is what the app's update check looks for.
+The same section is what the app shows once after updating to that version.
 
 ## Not carried over from ModWright
 

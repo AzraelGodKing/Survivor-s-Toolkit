@@ -107,6 +107,8 @@ public sealed partial class MainForm
         _filterTimer.Tick += (_, _) => { _filterTimer.Stop(); FillList(); };
         _filter.TextChanged += (_, _) => { _filterTimer.Stop(); _filterTimer.Start(); };
         _filter.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { _filter.Text = ""; e.SuppressKeyPress = true; } };
+        Ui.DoubleBuffer(_list);
+        Ui.DoubleBuffer(_problems);
         var install = SmallBtn("Install...", (_, _) => PickArchive());
         _undo = SmallBtn("Undo changes", (_, _) => { if (_scan == null) return; _history.Push(_enabled); SetEnabled(EnabledOnDisk()); });
         _save = SmallBtn("Save to game", async (_, _) => await SaveToGameAsync()).Role(ThemeRole.Primary);

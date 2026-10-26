@@ -128,13 +128,21 @@ public sealed partial class MainForm
 
         var checkUpdates = new CheckBox { Text = "Check for a new version when the app starts", AutoSize = true, Checked = _s.CheckForUpdates };
         checkUpdates.CheckedChanged += (_, _) => { _s.CheckForUpdates = checkUpdates.Checked; SaveSettings(); };
+        var autoUpdate = new CheckBox { Text = "Download new versions by themselves and install them when the app closes", AutoSize = true, Checked = _s.AutoUpdate };
+        autoUpdate.CheckedChanged += (_, _) => { _s.AutoUpdate = autoUpdate.Checked; SaveSettings(); };
+        autoUpdate.Enabled = checkUpdates.Checked;
+        checkUpdates.CheckedChanged += (_, _) => autoUpdate.Enabled = checkUpdates.Checked;
         var checkNow = Btn("Check now", async (_, _) => await CheckForUpdateAsync(quiet: false));
+        var whatsNew = Btn("What's new", (_, _) => ShowAllChanges());
         Tip(checkUpdates, "Only GitHub's public list of releases is read; nothing about you or your mods is sent");
+        Tip(autoUpdate, "The download is checked against the release's SHA-256 checksums like any update. A version you said not to be reminded about is left alone");
+        Tip(whatsNew, "The change notes of every version so far");
         var settings = new LinkLabel { Text = AppSettings.Folder, AutoSize = true, UseMnemonic = false };
         settings.LinkClicked += (_, _) => { Directory.CreateDirectory(AppSettings.Folder); Ui.Open(this, AppSettings.Folder); };
         stack.Controls.Add(Card("About", null,
-            Row(Lbl("Survivor's Toolkit " + Version), checkNow),
+            Row(Lbl("Survivor's Toolkit " + Version), checkNow, whatsNew),
             Row(checkUpdates),
+            Row(autoUpdate),
             Row(Lbl("Settings, modlists and backups"), settings),
             Row(Muted("Command line: run SurvivorsToolkit help in a terminal for list, problems, switch, play and install."))));
 
