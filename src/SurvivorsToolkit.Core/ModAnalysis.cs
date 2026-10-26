@@ -232,8 +232,25 @@ public sealed partial class ModAnalysis
         var name = Squash(m.Info!.Name);
         var display = Squash(m.Info.DisplayName);
         return name == p || Squash(m.FolderName) == p || display == p || name.EndsWith(p) && name.Length - p.Length <= 8
-            || Regex.IsMatch(m.Info.DisplayName, $@"(^|\W){Regex.Escape(phrase)}($|\W)", RegexOptions.IgnoreCase) && display.Length - p.Length <= 20;
+            || HasWord(m.Info.DisplayName, phrase) && display.Length - p.Length <= 20;
     }
+
+    /// <summary>
+    /// Whether <paramref name="phrase"/> is in <paramref name="text"/> as whole words, ignoring case. The same as the
+    /// pattern "(^|\W)phrase($|\W)", without building a new regex for every pair of mods each time a mod is ticked.
+    /// </summary>
+    internal static bool HasWord(string text, string phrase)
+    {
+        if (phrase.Length == 0) return false;
+        for (var at = text.IndexOf(phrase, StringComparison.OrdinalIgnoreCase); at >= 0; at = text.IndexOf(phrase, at + 1, StringComparison.OrdinalIgnoreCase))
+        {
+            var end = at + phrase.Length;
+            if ((at == 0 || !IsWordChar(text[at - 1])) && (end == text.Length || !IsWordChar(text[end]))) return true;
+        }
+        return false;
+    }
+
+    static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_' || char.GetUnicodeCategory(c) is System.Globalization.UnicodeCategory.NonSpacingMark or System.Globalization.UnicodeCategory.ConnectorPunctuation;
 
     static string Squash(string s) => new string(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 

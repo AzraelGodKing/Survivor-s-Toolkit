@@ -66,6 +66,13 @@ static class Ui
         return card;
     }
 
+    /// <summary>
+    /// Draws a list off-screen first, so refilling or scrolling a long one doesn't flicker or repaint row by row.
+    /// (For a ListView this turns on the control's own double-buffered style.)
+    /// </summary>
+    public static void DoubleBuffer(Control c) =>
+        typeof(Control).GetProperty("DoubleBuffered", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.SetValue(c, true);
+
     /// <summary>Shows a menu under a button.</summary>
     public static void DropDown(Control under, ContextMenuStrip menu)
     {

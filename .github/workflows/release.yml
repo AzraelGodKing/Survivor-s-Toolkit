@@ -1,13 +1,14 @@
 # Publishes Survivor's Toolkit as a GitHub release the app's self-update finds:
 #   tag v<Version>, with SurvivorsToolkit-<Version>-win-x64.exe and SHA256SUMS.txt.
-# The version is <Version> in Directory.Build.props; bump it before running this.
+# The version is <Version> in Directory.Build.props; bump it, and add a "## <Version>" section to CHANGELOG.md, before
+# running this. That section is the release's notes and what the app shows once after updating to it.
 name: Release
 
 on:
   workflow_dispatch:
     inputs:
       notes:
-        description: "Change notes shown in the app's update window (optional)"
+        description: "Extra notes put above the CHANGELOG.md section (optional)"
         required: false
         type: string
 
@@ -32,6 +33,25 @@ jobs:
           if (-not $v) { throw "No <Version> in Directory.Build.props" }
           "version=$v" >> $env:GITHUB_OUTPUT
           "tag=v$v" >> $env:GITHUB_OUTPUT
+      - name: Read the change notes
+        shell: bash
+        run: |
+          version="${{ steps.meta.outputs.version }}"
+          # CHANGELOG.md wraps long items onto indented lines; GitHub shows every line break in release notes, so those
+          # lines are joined back onto their item (a nested "- " item stays on its own line). The same as ModWright.
+          awk -v v="$version" '
+            { sub(/\r$/, "") }
+            $0 == "## " v { on = 1; next }
+            on && /^## / { exit }
+            !on { next }
+            held && /^[ \t]+[^ \t]/ && !/^[ \t]+[-*+][ \t]/ { sub(/^[ \t]+/, ""); buf = buf " " $0; next }
+            { if (held) print buf; buf = $0; held = /[^ \t]/; if (!held) print }
+            END { if (held) print buf }
+          ' CHANGELOG.md > changelog-notes.md
+          if ! grep -q '[^[:space:]]' changelog-notes.md; then
+            echo "::error::CHANGELOG.md has no '## $version' section"
+            exit 1
+          fi
       - name: Refuse an existing tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,7 +63,7 @@ jobs:
         run: dotnet test SurvivorsToolkit.sln -c Release
       - name: Publish
         run: |
-          dotnet publish src/SurvivorsToolkit/SurvivorsToolkit.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+          dotnet publish src/SurvivorsToolkit/SurvivorsToolkit.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true -o publish
           $name = "SurvivorsToolkit-${{ steps.meta.outputs.version }}-win-x64.exe"
           New-Item -ItemType Directory -Force release | Out-Null
           Copy-Item publish/SurvivorsToolkit.exe "release/$name"
@@ -54,7 +74,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NOTES: ${{ inputs.notes }}
         run: |
-          $notes = if ($env:NOTES) { $env:NOTES } else { "Survivor's Toolkit ${{ steps.meta.outputs.version }}." }
+          $notes = Get-Content changelog-notes.md -Raw
+          if ($env:NOTES) { $notes = $env:NOTES + "`n`n" + $notes }
           Set-Content -Path release-notes.md -Value $notes -Encoding utf8
           gh release create "${{ steps.meta.outputs.tag }}" (Get-ChildItem release/*).FullName `
             --repo "${{ github.repository }}" --target "${{ github.sha }}" `

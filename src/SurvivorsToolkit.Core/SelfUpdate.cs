@@ -17,7 +17,8 @@ public sealed record PreparedUpdate(string Version, string StagingDir)
 /// the next start deletes the leftover.
 /// <para>The running program never swaps its own file: .NET reads parts of a single-file program from its exe for as
 /// long as it runs. Instead the downloaded program is started from the staging folder (<see cref="HandOff"/>); it waits
-/// for this one to exit, installs itself (<see cref="Finish"/>) and starts the installed copy.</para>
+/// for this one to exit, installs itself (<see cref="Finish"/>) and, when asked, starts the installed copy. So an update
+/// can wait until the window is closed, the way ModWright installs one "when I close the app".</para>
 /// </summary>
 public static class SelfUpdate
 {
@@ -25,7 +26,10 @@ public static class SelfUpdate
     public const string ExeName = "SurvivorsToolkit.exe";
     const long MaxDownloadBytes = 400L * 1024 * 1024;
 
-    /// <summary>Passed to the downloaded program: "--finish-update &lt;process id&gt; &lt;target exe&gt; &lt;version replaced&gt;".</summary>
+    /// <summary>
+    /// Passed to the downloaded program: "--finish-update &lt;process id&gt; &lt;target exe&gt; &lt;version replaced&gt; restart|quiet".
+    /// "quiet" installs without starting the new version (the update was left for when the app closes).
+    /// </summary>
     public const string FinishArg = "--finish-update";
     /// <summary>Passed to the new program after an update, followed by the version it replaced.</summary>
     public const string UpdatedFromArg = "--updated-from";
@@ -207,14 +211,28 @@ public static class SelfUpdate
 
     /// <summary>
     /// Starts the downloaded program to install itself over <paramref name="target"/> as soon as this process exits,
-    /// then start the installed copy. Nothing is changed until this process is gone.
+    /// then (with <paramref name="restart"/>) start the installed copy. Nothing is changed until this process is gone.
     /// </summary>
-    public static void HandOff(PreparedUpdate u, string target, string fromVersion)
+    public static void HandOff(PreparedUpdate u, string target, string fromVersion, bool restart = true)
     {
         if (!File.Exists(u.Exe)) throw new FileNotFoundException("The downloaded update is no longer in " + u.StagingDir + ".", u.Exe);
         var psi = new ProcessStartInfo(u.Exe) { UseShellExecute = false, WorkingDirectory = u.StagingDir };
-        foreach (var a in new[] { FinishArg, Environment.ProcessId.ToString(), target, fromVersion }) psi.ArgumentList.Add(a);
+        foreach (var a in FinishArgs(Environment.ProcessId, target, fromVersion, restart)) psi.ArgumentList.Add(a);
         Process.Start(psi)?.Dispose();
+    }
+
+    /// <summary>The arguments <see cref="HandOff"/> starts the downloaded program with.</summary>
+    public static string[] FinishArgs(int pid, string target, string fromVersion, bool restart) =>
+        new[] { FinishArg, pid.ToString(), target, fromVersion, restart ? "restart" : "quiet" };
+
+    /// <summary>
+    /// Reads the arguments after <see cref="FinishArg"/>; null when they are missing. A hand-off from a version before
+    /// "restart|quiet" existed has no fourth argument and always restarted.
+    /// </summary>
+    public static (int Pid, string Target, string FromVersion, bool Restart)? ParseFinishArgs(IReadOnlyList<string> args)
+    {
+        if (args.Count < 3 || !int.TryParse(args[0], out var pid)) return null;
+        return (pid, args[1], args[2], args.Count < 4 || args[3] != "quiet");
     }
 
     /// <summary>
@@ -224,8 +242,8 @@ public static class SelfUpdate
     /// </summary>
     public static int Finish(IReadOnlyList<string> args, Action<string> fail)
     {
-        if (args.Count < 3 || !int.TryParse(args[0], out var pid)) { fail("The update was started without its details."); return 2; }
-        var (target, fromVersion) = (args[1], args[2]);
+        if (ParseFinishArgs(args) is not { } parsed) { fail("The update was started without its details."); return 2; }
+        var (pid, target, fromVersion, restart) = parsed;
         var self = Environment.ProcessPath ?? throw new InvalidOperationException("No program path.");
         var version = UpdateCheck.CurrentVersion;
         Log($"Installing {version} over {target} (replacing {fromVersion}, process {pid}).");
@@ -252,11 +270,14 @@ public static class SelfUpdate
             // Antivirus sometimes removes a freshly copied, unsigned exe.
             if (!File.Exists(target) || Sha256Of(target) != Sha256Of(self))
                 throw new IOException($"{Path.GetFileName(target)} disappeared or changed right after it was copied, which usually means antivirus removed it.");
-            var psi = new ProcessStartInfo(target) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(target)! };
-            psi.ArgumentList.Add(UpdatedFromArg);
-            psi.ArgumentList.Add(fromVersion);
-            Process.Start(psi)?.Dispose();
-            Log("Installed.");
+            if (restart)
+            {
+                var psi = new ProcessStartInfo(target) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(target)! };
+                psi.ArgumentList.Add(UpdatedFromArg);
+                psi.ArgumentList.Add(fromVersion);
+                Process.Start(psi)?.Dispose();
+            }
+            Log(restart ? "Installed." : "Installed; it starts the next time the app is opened.");
             return 0;
         }
         catch (Exception e)
@@ -266,7 +287,7 @@ public static class SelfUpdate
             try
             {
                 if (File.Exists(target + OldSuffix)) { File.Move(target + OldSuffix, target, overwrite: true); back = true; }
-                if (back) Process.Start(new ProcessStartInfo(target) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(target)! })?.Dispose();
+                if (back && restart) Process.Start(new ProcessStartInfo(target) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(target)! })?.Dispose();
             }
             catch (Exception e2) when (e2 is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { }
             fail($"Survivor's Toolkit {version} was installed, but Windows wouldn't use it: {e.Message}\n\n" +
