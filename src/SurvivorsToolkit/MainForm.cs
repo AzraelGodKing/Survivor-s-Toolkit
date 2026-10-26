@@ -134,6 +134,7 @@ public sealed partial class MainForm : Form
     void ApplyTheme()
     {
         foreach (Form f in Application.OpenForms) Theme.Apply(f);
+        _checked = (null, new(), default); // the problems list is coloured too
         FillList();
     }
 

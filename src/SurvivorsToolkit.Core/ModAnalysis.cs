@@ -203,6 +203,8 @@ public sealed partial class ModAnalysis
     public static List<ModProblem> Requirements(IReadOnlyList<InstalledMod> all, IReadOnlySet<string> enabledIds)
     {
         var list = new List<ModProblem>();
+        // Squashed names are worked out once per mod, not once per mod for every phrase of every other mod.
+        var named = all.Where(o => !o.Locked && o.Info != null).Select(o => new Named(o)).ToList();
         foreach (var m in all.Where(m => enabledIds.Contains(m.Id) && !m.Locked && m.Info != null))
         {
             foreach (Match match in NeedsRx().Matches(m.Info!.Description))
@@ -212,7 +214,9 @@ public sealed partial class ModAnalysis
                 var after = m.Info.Description[(match.Index + match.Length)..].TrimStart().ToLowerInvariant();
                 var saysMod = after.StartsWith("mod");
                 var onServer = after.StartsWith("on the server") || after.StartsWith("mod on the server");
-                var found = all.Where(o => o.Id != m.Id && !o.Locked && o.Info != null && Names(o, phrase)).ToList();
+                var p = Squash(phrase);
+                var word = p.Length < 3 ? null : new Regex($@"(^|\W){Regex.Escape(phrase)}($|\W)", RegexOptions.IgnoreCase);
+                var found = word == null ? new List<InstalledMod>() : named.Where(o => o.Mod.Id != m.Id && o.Is(p, word)).Select(o => o.Mod).ToList();
                 if (found.Any(o => enabledIds.Contains(o.Id))) continue;
                 if (found.Count > 0)
                     list.Add(new ModProblem(onServer ? Severity.Info : Severity.Warning, m.Id,
@@ -224,33 +228,20 @@ public sealed partial class ModAnalysis
         return list;
     }
 
-    /// <summary>Whether <paramref name="phrase"/> names mod <paramref name="m"/>: its Name, folder or display name, or the end of its Name ("Bait" for "AzraelBait").</summary>
-    static bool Names(InstalledMod m, string phrase)
+    /// <summary>A mod with its names squashed, to tell whether a phrase names it.</summary>
+    sealed class Named(InstalledMod mod)
     {
-        var p = Squash(phrase);
-        if (p.Length < 3) return false;
-        var name = Squash(m.Info!.Name);
-        var display = Squash(m.Info.DisplayName);
-        return name == p || Squash(m.FolderName) == p || display == p || name.EndsWith(p) && name.Length - p.Length <= 8
-            || HasWord(m.Info.DisplayName, phrase) && display.Length - p.Length <= 20;
-    }
+        public InstalledMod Mod { get; } = mod;
+        readonly string _name = Squash(mod.Info!.Name), _display = Squash(mod.Info.DisplayName), _folder = Squash(mod.FolderName);
 
-    /// <summary>
-    /// Whether <paramref name="phrase"/> is in <paramref name="text"/> as whole words, ignoring case. The same as the
-    /// pattern "(^|\W)phrase($|\W)", without building a new regex for every pair of mods each time a mod is ticked.
-    /// </summary>
-    internal static bool HasWord(string text, string phrase)
-    {
-        if (phrase.Length == 0) return false;
-        for (var at = text.IndexOf(phrase, StringComparison.OrdinalIgnoreCase); at >= 0; at = text.IndexOf(phrase, at + 1, StringComparison.OrdinalIgnoreCase))
-        {
-            var end = at + phrase.Length;
-            if ((at == 0 || !IsWordChar(text[at - 1])) && (end == text.Length || !IsWordChar(text[end]))) return true;
-        }
-        return false;
+        /// <summary>
+        /// Whether squashed phrase <paramref name="p"/> names it: its Name, folder or display name, or the end of its Name
+        /// ("Bait" for "AzraelBait"); or the phrase as a word of its display name (<paramref name="word"/>).
+        /// </summary>
+        public bool Is(string p, Regex word) =>
+            _name == p || _folder == p || _display == p || _name.EndsWith(p) && _name.Length - p.Length <= 8
+            || _display.Length - p.Length <= 20 && word.IsMatch(Mod.Info!.DisplayName);
     }
-
-    static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_' || char.GetUnicodeCategory(c) is System.Globalization.UnicodeCategory.NonSpacingMark or System.Globalization.UnicodeCategory.ConnectorPunctuation;
 
     static string Squash(string s) => new string(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 

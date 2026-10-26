@@ -79,8 +79,7 @@ public sealed partial class MainForm
             if (_fillingOptions || _eac.SelectedIndex < 0) return;
             _s.Eac = EacChoices[_eac.SelectedIndex].Mode;
             SaveSettings();
-            Recheck();
-            RefreshRows();
+            UpdateState();
         };
         _launchOptions.Leave += (_, _) => { if (_s.LaunchOptions != _launchOptions.Text.Trim()) { _s.LaunchOptions = _launchOptions.Text.Trim(); SaveSettings(); } };
         _backupSave.CheckedChanged += (_, _) => { if (_fillingOptions) return; _s.BackupSaveBeforePlay = _backupSave.Checked; SaveSettings(); };

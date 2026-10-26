@@ -175,15 +175,3 @@ public class WhatsNewTests
     }
 }
 
-public class WordMatchTests
-{
-    [Theory]
-    [InlineData("Azrael's Bait Mod", "bait", true)]
-    [InlineData("AzraelBait", "bait", false)]
-    [InlineData("Bait", "Bait", true)]
-    [InlineData("Bait_Plus", "bait", false)]
-    [InlineData("SCore (Sphereii)", "score", true)]
-    [InlineData("Super Bait 2", "bait 2", true)]
-    [InlineData("baitbait bait", "bait", true)]
-    public void MatchesWholeWordsOnly(string text, string phrase, bool expected) => Assert.Equal(expected, ModAnalysis.HasWord(text, phrase));
-}

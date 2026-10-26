@@ -16,13 +16,12 @@ Each `## <version>` section is shown in the app once after it updates to that ve
 - **Download through the browser** when this copy can't replace itself (a folder it can't write to, or a build that
   isn't the single-file exe).
 - **A faster, smoother window.**
-  - Scanning no longer freezes the window: working out each mod's side (which walks the mod's folder) and finding the
-    game now happen in the background with the rest of the scan.
-  - Ticking a mod updates the rows in place instead of rebuilding the list, and the problem check runs once per tick
-    instead of twice. Ticking several mods quickly checks once, after the last one.
-  - Typing in the filter box rebuilds the list once you pause, and no longer re-checks every problem on each key.
-  - The game's last log is read for the crash note in the background at start-up.
-  - Right-clicking a mod no longer walks its folder again to show the detected side.
+  - Scanning no longer freezes the window: finding the game, working out each mod's side (which walks the mod's
+    folder) and looking for its settings files now happen in the background with the rest of the scan.
+  - The problem check runs again only when the ticks, the scan or EasyAntiCheat change, not on every filter key,
+    sort or colour change. Ticking several mods quickly refills the list once.
+  - Typing in the filter box rebuilds the list once you pause.
+  - The game's log is read in the background: at start-up for the crash note, and in the log window.
   - The mod and problem lists are drawn double-buffered, so they don't flicker.
   - The exe is compiled ahead of time (ReadyToRun), so the app opens faster.
 
