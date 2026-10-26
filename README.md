@@ -82,6 +82,12 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   from a backup (what it replaces is backed up first), and delete a save or a world - every delete backs the saves up
   first. Deleting only a world's map frees that space and keeps the saves: the game builds the map again from the
   world's seed when it needs it.
+- **XML tweak builder:** **Tools > Make an XML tweak mod** builds a small XPath mod from a form. Pick one of the game's
+  own config files (`Data/Config`), find the item, block or entity in it, pick a property - the list shows what the game
+  has now - and type the new value. "Every one of them in this file" sets it on all of them at once. The tweaks you add
+  are shown as the XML they will become, and **Make the mod** writes an ordinary mod folder with a `ModInfo.xml` and a
+  `Config` file of `<set>` patches. The xpath is built from the real document, so it points at something that is
+  actually there.
 - **Game update warning:** the app remembers which build of the game it last saw (Steam's build id, the version in the
   log and the exe's date). When 7 Days to Die has been updated, it says so once and names the enabled mods most likely
   to break: the ones with code first, since the game's own DLLs changed under them, then any that say they are for an
