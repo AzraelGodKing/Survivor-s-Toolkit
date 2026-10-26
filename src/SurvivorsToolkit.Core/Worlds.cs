@@ -39,7 +39,12 @@ public static class Worlds
 
     static IEnumerable<string> Names(string folder)
     {
-        try { return Directory.Exists(folder) ? Directory.GetDirectories(folder).Select(Path.GetFileName).Where(n => n is { Length: > 0 })! : Enumerable.Empty<string>(); }
+        try
+        {
+            return Directory.Exists(folder)
+                ? Directory.GetDirectories(folder).Select(d => Path.GetFileName(d) ?? "").Where(n => n.Length > 0).ToList()
+                : Enumerable.Empty<string>();
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return Enumerable.Empty<string>(); }
     }
 
