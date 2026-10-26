@@ -76,6 +76,11 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   address, port, password and blood moon frequency in from the dedicated server's own `serverconfig.xml` when there is
   one on this PC; for a hosted server, copy them from your host's panel. The password is kept encrypted for your
   Windows account.
+- **Scheduled restarts:** **Scheduled restarts** in the server panel warns everyone in chat ("the server restarts in
+  15 minutes", again at 5 and 1, in your words), saves the world, shuts the server down, and - for a server on this PC -
+  starts it again and says it is back. Give it one or more times of day. The schedule runs while that window is open;
+  for one that runs whether the app is open or not, point Windows' Task Scheduler at `SurvivorsToolkit restart`.
+  **Restart now** does the same with the first warning going out at once, and shows you the whole timeline first.
 - **Client pack:** **Tools > Export a client pack for players** zips the enabled mods players need (Client only, or
   Server + clients) into one file, with the profile and a readme inside, so players' mods match the server's. They
   drop it on Survivor's Toolkit, or unzip it into their game folder.
@@ -119,9 +124,11 @@ SurvivorsToolkit updates               newer versions of installed mods on GitHu
 SurvivorsToolkit server                start the dedicated server on this PC
 SurvivorsToolkit status [--json]       the server's day, players and blood moon, over its telnet console
 SurvivorsToolkit rcon <command>        send one command to that console ("say hello", "saveworld")
+SurvivorsToolkit restart [--now]       warn the players, save the world, shut the server down, start it again
 ```
 
-A desktop shortcut to `SurvivorsToolkit.exe play "Horde night"` starts that setup in one click.
+A desktop shortcut to `SurvivorsToolkit.exe play "Horde night"` starts that setup in one click, and a Windows
+scheduled task running `SurvivorsToolkit.exe restart` at 05:00 restarts the server with its warnings every morning.
 
 ## Build
 

@@ -15,11 +15,12 @@ namespace SurvivorsToolkit.Core;
 /// SurvivorsToolkit server               start the dedicated server on this PC
 /// SurvivorsToolkit status [--json]      the server's day, players and blood moon over its telnet console
 /// SurvivorsToolkit rcon &lt;command&gt;       send one command to the server's telnet console
+/// SurvivorsToolkit restart [--now]      warn the players, save the world, shut the server down (and start it again)
 /// </code>
 /// </summary>
 public static class Cli
 {
-    public static readonly string[] Commands = { "list", "problems", "lists", "switch", "play", "install", "updates", "server", "status", "rcon", "help", "--help", "-h", "/?" };
+    public static readonly string[] Commands = { "list", "problems", "lists", "switch", "play", "install", "updates", "server", "status", "rcon", "restart", "help", "--help", "-h", "/?" };
 
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0].ToLowerInvariant());
 
@@ -31,7 +32,7 @@ public static class Cli
         if (cmd is "help" or "--help" or "-h" or "/?") { o.WriteLine(Help); return 0; }
 
         // These two only talk to the server's console, so they don't need the game installed here.
-        if (cmd is "status" or "rcon") return Console_(cmd, rest, s, o, json).GetAwaiter().GetResult();
+        if (cmd is "status" or "rcon" or "restart") return Console_(cmd, rest, s, o, json, args.Contains("--now")).GetAwaiter().GetResult();
 
         var steam = SteamLibraries.Find();
         var install = SevenDays.Detect(steam, s.GameFolder, s.UserDataFolder);
@@ -113,9 +114,10 @@ public static class Cli
     }
 
     /// <summary>status and rcon: one telnet link to the server in the settings, then the answer as text or JSON.</summary>
-    static async Task<int> Console_(string cmd, List<string> rest, AppSettings s, TextWriter o, bool json)
+    static async Task<int> Console_(string cmd, List<string> rest, AppSettings s, TextWriter o, bool json, bool now = false)
     {
         if (!s.Telnet.IsSet) { o.WriteLine("No server console is set up. Open the app, Tools > Server panel and console, and fill in the address, port and password."); return 2; }
+        if (cmd == "restart") return await RestartAsync(s, o, now);
         if (cmd == "rcon" && rest.Count == 0) { o.WriteLine("Usage: rcon <command>   for example  rcon \"say hello\""); return 2; }
         try
         {
@@ -132,6 +134,43 @@ public static class Cli
                 o.WriteLine($"{s.Telnet.Describe}: up, {status.Clock}, {status.Players} player{(status.Players == 1 ? "" : "s")}, blood moon {status.BloodMoon}{(status.Version is { } v ? ", game " + v : "")}");
                 foreach (var p in status.PlayerList) o.WriteLine($"  {p.Name}  health {p.Health}, level {p.Level}, ping {p.Ping}");
             }
+            return 0;
+        }
+        catch (ServerConsoleException e)
+        {
+            o.WriteLine(e.Message);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// restart: the warnings, the save and the shutdown, and the server here started again when the plan says so.
+    /// Made for Windows' Task Scheduler, which can run it whether the app is open or not.
+    /// </summary>
+    static async Task<int> RestartAsync(AppSettings s, TextWriter o, bool now)
+    {
+        var plan = s.Restarts;
+        var warn = now ? 0 : plan.WarnMinutes.Where(m => m > 0).DefaultIfEmpty(0).Max();
+        var runAt = DateTime.Now.AddMinutes(warn);
+        var steps = Restarts.Timeline(now ? new RestartPlan { WarnMinutes = new List<int>(), Message = plan.Message, BackMessage = plan.BackMessage, SaveWorld = plan.SaveWorld, StartAgain = plan.StartAgain, StartAgainAfterSeconds = plan.StartAgainAfterSeconds, BackAfterSeconds = plan.BackAfterSeconds } : plan, runAt);
+        o.WriteLine($"Restarting {s.Telnet.Describe} at {runAt:HH:mm}:");
+        try
+        {
+            await Restarts.RunAsync(steps, async (step, ct) =>
+            {
+                o.WriteLine($"{DateTime.Now:HH:mm:ss}  {step.Describe}");
+                if (step.Step == RestartStep.StartAgain)
+                {
+                    var steam = SteamLibraries.Find();
+                    var game = SevenDays.Detect(steam, s.GameFolder, s.UserDataFolder);
+                    if (DedicatedServer.Find(steam, s.ServerFolder, game) is not { } server) { o.WriteLine("  no dedicated server on this PC to start"); return; }
+                    GameRunner.StartServer(server, s);
+                    return;
+                }
+                using var console = await TelnetConsole.ConnectAsync(s.Telnet.Host, s.Telnet.Port, Secrets.Unprotect(s.Telnet.ProtectedPassword), ct);
+                var answer = await console.SendAsync(step.Command!, ct);
+                if (answer.Trim().Length > 0) o.WriteLine("  " + answer.Replace("\n", "\n  "));
+            }, () => DateTime.Now, (wait, ct) => Task.Delay(wait, ct), CancellationToken.None);
             return 0;
         }
         catch (ServerConsoleException e)
@@ -171,5 +210,7 @@ public static class Cli
           SurvivorsToolkit server                start the dedicated server on this PC (its config is backed up first)
           SurvivorsToolkit status [--json]       the server's day, players and blood moon, over its telnet console
           SurvivorsToolkit rcon <command>        send one command to that console ("say hello", "saveworld")
+          SurvivorsToolkit restart [--now]       warn the players in chat, save the world, shut the server down, and
+                                                 start it again if the plan says so (--now skips the warnings)
         """;
 }

@@ -636,6 +636,15 @@ public sealed partial class MainForm
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { Error(this, "Couldn't start the server: " + e.Message); }
     }
 
+    /// <summary>Starts the dedicated server without a note of its own, for the scheduled restarts; false when there is none.</summary>
+    bool StartServerQuietly()
+    {
+        var install = _scan?.Install ?? SevenDays.Detect(_steam, _s.GameFolder, _s.UserDataFolder);
+        if (DedicatedServer.Find(_steam, _s.ServerFolder, install) is not { } server) return false;
+        GameRunner.StartServer(server, _s);
+        return true;
+    }
+
     async Task PlayAsync(bool watch, EacMode? eac = null)
     {
         if (_scan == null) { Error(this, "Find the game first (Game folder...)."); return; }
@@ -856,7 +865,7 @@ public sealed partial class MainForm
 
     /// <summary>The server panel: status over telnet and the admin console. It needs no mod scan, so it always opens.</summary>
     void OpenServerConsole() =>
-        new ServerConsoleForm(_s, SaveSettings, ServerConfig).Show(this);
+        new ServerConsoleForm(_s, SaveSettings, ServerConfig, StartServerQuietly).Show(this);
 
     async Task ExportClientPackAsync()
     {
