@@ -76,6 +76,16 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   address, port, password and blood moon frequency in from the dedicated server's own `serverconfig.xml` when there is
   one on this PC; for a hosted server, copy them from your host's panel. The password is kept encrypted for your
   Windows account.
+- **Worlds and saves:** **Saves...** lists your worlds with the saves in each, when they were last played and what
+  they take up, and the map the game built for a random gen world (`GeneratedWorlds`), which is usually the biggest
+  thing in there. Rename a save, or a whole world (its map is renamed with it), back a save up to a zip, restore one
+  from a backup (what it replaces is backed up first), and delete a save or a world - every delete backs the saves up
+  first. Deleting only a world's map frees that space and keeps the saves: the game builds the map again from the
+  world's seed when it needs it.
+- **Crash helper:** **Tools > What went wrong last time?** reads the game's last log, says whether the session ended
+  badly (the game said so, or the log just stops), lists the errors as the log viewer groups them, and names the mod
+  most of them point at - with a button that shows you that mod in the list. When the last session ended badly, the
+  app says so once at the top of the window the next time it starts.
 - **Scheduled restarts:** **Scheduled restarts** in the server panel warns everyone in chat ("the server restarts in
   15 minutes", again at 5 and 1, in your words), saves the world, shuts the server down, and - for a server on this PC -
   starts it again and says it is back. Give it one or more times of day. The schedule runs while that window is open;

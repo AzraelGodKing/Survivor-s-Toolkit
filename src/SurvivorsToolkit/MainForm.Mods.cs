@@ -676,6 +676,41 @@ public sealed partial class MainForm
         new LogForm(_scan, watch, id => { Activate(); SelectMod(id); }, modId).Show(this);
     }
 
+    /// <summary>The crash helper: the last log read down to "it looks like this mod".</summary>
+    void OpenCrashHelper()
+    {
+        if (_scan == null) return;
+        UseWaitCursor = true;
+        CrashReport report;
+        try { report = Crash.Check(_scan.Install, _scan.Mods); }
+        finally { UseWaitCursor = false; }
+        _s.SeenCrashLog = CrashKey(report);
+        SaveSettings();
+        new CrashForm(report, _scan, () => OpenLog(watch: false, report.SuspectModId), id => { Activate(); SelectMod(id); }).Show(this);
+    }
+
+    /// <summary>Which log a crash note was about, so the same crash isn't pointed out twice.</summary>
+    static string? CrashKey(CrashReport report) => report.LogPath == null ? null : report.LogPath + "|" + report.Written.Ticks;
+
+    /// <summary>
+    /// At start-up: when the last session ended badly and it hasn't been mentioned yet, say so once. The helper itself
+    /// is a click away in Tools; nothing is opened over the player's window.
+    /// </summary>
+    void NoteLastCrash()
+    {
+        if (_scan == null) return;
+        try
+        {
+            var report = Crash.Check(_scan.Install, _scan.Mods);
+            if (!report.Crashed || CrashKey(report) is not { } key || key == _s.SeenCrashLog) return;
+            _s.SeenCrashLog = key;
+            SaveSettings();
+            var mod = report.SuspectModId is { } id ? _scan.Mods.FirstOrDefault(m => m.Id == id)?.DisplayName : null;
+            ShowNote($"The game's last session ended badly{(mod != null ? $", and most of the errors point at {mod}" : "")}. Tools > What went wrong last time has the details.", Tone.Warn);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
     // ------------------------------------------------------------ modlists
 
     void FillModlists()
@@ -836,6 +871,7 @@ public sealed partial class MainForm
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Server sync...", null, async (_, _) => await OpenServerSync()) { Enabled = _scan != null });
         menu.Items.Add("Server panel and console...", null, (_, _) => OpenServerConsole());
+        menu.Items.Add(new ToolStripMenuItem("What went wrong last time?", null, (_, _) => OpenCrashHelper()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripMenuItem("Export a client pack for players...", null, async (_, _) => await ExportClientPackAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Open the game's Mods folder", null, (_, _) => { Directory.CreateDirectory(_scan!.Install.GameMods); Ui.Open(this, _scan.Install.GameMods); }) { Enabled = _scan != null });
