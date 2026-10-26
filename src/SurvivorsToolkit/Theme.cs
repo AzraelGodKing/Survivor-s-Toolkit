@@ -37,7 +37,7 @@ public sealed record Palette(
 }
 
 /// <summary>
-/// Dark (default), light and Windows High Contrast themes for the WinForms UI. <see cref="Apply"/> walks a control tree
+/// Wasteland (default), the other named themes and Windows High Contrast for the WinForms UI. <see cref="Apply"/> walks a control tree
 /// and colours it; call it again after <see cref="Set"/> to switch live. The log keeps its console look in dark and light.
 /// </summary>
 public static class Theme
@@ -45,7 +45,52 @@ public static class Theme
     public const string DarkName = Display.Dark, LightName = Display.Light, KatsName = Display.Kats, KonekoName = Display.Koneko,
         SerinaName = Display.Serina, WolfieName = Display.Wolfie, VickraName = Display.Vickra, KitomiName = Display.Kitomi,
         SzendooName = Display.Szendoo, TriphlxName = Display.Triphlx, TohmaName = Display.Tohma,
-        SkywolfName = Display.Skywolf, HunterName = Display.Hunter, SystemName = Display.System, HighContrastName = "HighContrast";
+        SkywolfName = Display.Skywolf, HunterName = Display.Hunter, SystemName = Display.System, HighContrastName = "HighContrast",
+        WastelandName = Display.Wasteland, WastelandLightName = Display.WastelandLight;
+
+    // Wasteland follows 7 Days to Die's own menus: soot-black and rusted-iron surfaces, bone-white text, rust orange for
+    // buttons, ticks and selection, and blood red kept for the one main button of each window and the coloured half of
+    // the app name, like the red of the game's logo. Neither variant uses The Fun Pimps' logos or art.
+
+    public static readonly Palette WastelandPalette = new(
+        WastelandName, true,
+        Back: Color.FromArgb(24, 22, 20), Surface: Color.FromArgb(35, 32, 28), Header: Color.FromArgb(13, 12, 11),
+        Input: Color.FromArgb(19, 17, 15), Border: Color.FromArgb(78, 66, 54),
+        Text: Color.FromArgb(224, 216, 198), Muted: Color.FromArgb(154, 143, 126), Title: Color.FromArgb(242, 234, 216),
+        Button: Color.FromArgb(54, 45, 37), ButtonText: Color.FromArgb(222, 138, 72),
+        ButtonHover: Color.FromArgb(72, 59, 48), ButtonDown: Color.FromArgb(63, 52, 42),
+        Accent: Color.FromArgb(178, 84, 30), AccentHover: Color.FromArgb(202, 102, 42), AccentText: Color.White,
+        Primary: Color.FromArgb(158, 22, 22), PrimaryHover: Color.FromArgb(184, 34, 30),
+        Track: Color.FromArgb(50, 43, 37), ListHeader: Color.FromArgb(29, 27, 24),
+        Ok: Color.FromArgb(156, 196, 82), Warn: Color.FromArgb(234, 180, 64), Error: Color.FromArgb(240, 100, 86), Info: Color.FromArgb(222, 164, 106))
+    {
+        AccentDeep = Color.FromArgb(104, 42, 12),
+        PrimaryDeep = Color.FromArgb(88, 8, 8),
+        PrimaryText = Color.White,
+        Brand = Color.FromArgb(206, 36, 32),
+    };
+
+    /// <summary>
+    /// Wasteland Light: the same rust and blood red on sun-bleached, dusty parchment surfaces, with dark soot-brown text.
+    /// The brand bar keeps Wasteland's dark colours (see <see cref="Banner"/>).
+    /// </summary>
+    public static readonly Palette WastelandLightPalette = new(
+        WastelandLightName, false,
+        Back: Color.FromArgb(226, 218, 202), Surface: Color.FromArgb(242, 236, 224), Header: Color.FromArgb(242, 236, 224),
+        Input: Color.FromArgb(251, 248, 241), Border: Color.FromArgb(192, 178, 156),
+        Text: Color.FromArgb(40, 32, 26), Muted: Color.FromArgb(102, 90, 76), Title: Color.FromArgb(24, 18, 14),
+        Button: Color.FromArgb(224, 212, 192), ButtonText: Color.FromArgb(132, 54, 16),
+        ButtonHover: Color.FromArgb(212, 196, 172), ButtonDown: Color.FromArgb(200, 182, 156),
+        Accent: Color.FromArgb(160, 70, 20), AccentHover: Color.FromArgb(182, 86, 30), AccentText: Color.White,
+        Primary: Color.FromArgb(150, 20, 20), PrimaryHover: Color.FromArgb(174, 32, 30),
+        Track: Color.FromArgb(210, 198, 178), ListHeader: Color.FromArgb(234, 226, 212),
+        Ok: Color.FromArgb(68, 108, 28), Warn: Color.FromArgb(152, 88, 0), Error: Color.FromArgb(172, 24, 24), Info: Color.FromArgb(146, 64, 18))
+    {
+        AccentDeep = Color.FromArgb(104, 40, 8),
+        PrimaryDeep = Color.FromArgb(92, 8, 8),
+        PrimaryText = Color.White,
+        Brand = Color.FromArgb(150, 20, 20),
+    };
 
     // The look follows Steam's own desktop client: deep slate-blue surfaces, a near-black brand bar, Steam blue for
     // links, ticks and selection, light-blue secondary buttons and a green button for the main job. Neither theme uses
@@ -317,10 +362,11 @@ public static class Theme
     public static Color LogText => HighContrast ? SystemColors.WindowText : Color.FromArgb(198, 212, 223);
 
     /// <summary>
-    /// The brand bar keeps the dark colours in the light theme too, the way Steam's own tools keep their dark top bar,
+    /// The brand bar keeps the dark colours in the light themes too, the way Steam's own tools keep their dark top bar,
     /// so the window looks like the same product in either theme. High Contrast uses the contrast colours throughout.
     /// </summary>
-    public static Palette Banner => Current == LightPalette ? DarkPalette : Current;
+    public static Palette Banner =>
+        Current == LightPalette ? DarkPalette : Current == WastelandLightPalette ? WastelandPalette : Current;
 
     /// <summary>The palette a control is drawn with: the banner's inside the brand bar, the theme's everywhere else.</summary>
     public static Palette PaletteFor(Control? c)
@@ -330,16 +376,16 @@ public static class Theme
         return Current;
     }
 
-    public static Palette Current { get; private set; } = DarkPalette;
+    public static Palette Current { get; private set; } = WastelandPalette;
 
-    /// <summary>What the user picked: "Dark", "Light", "Kats", "Koneko", "Serina", "Wolfie", "Vickra", "Kitomi", "Szendoo", "Triphlx", "Tohma", "Skywolf", "Hunter" or "System". <see cref="Current"/> is what that resolves to now.</summary>
-    public static string Choice { get; private set; } = DarkName;
+    /// <summary>What the user picked: "Wasteland", "WastelandLight", "Dark", "Light", "Kats", "Koneko", "Serina", "Wolfie", "Vickra", "Kitomi", "Szendoo", "Triphlx", "Tohma", "Skywolf", "Hunter" or "System". <see cref="Current"/> is what that resolves to now.</summary>
+    public static string Choice { get; private set; } = WastelandName;
 
     /// <summary>True while Windows High Contrast is on; it overrides the chosen theme.</summary>
     public static bool HighContrast => Current.Name == HighContrastName;
 
     /// <summary>
-    /// Picks a theme by name ("Dark", "Light" or "System"); anything else is dark, the default. Windows High Contrast,
+    /// Picks a theme by name ("Wasteland", "Dark", "Light", "System" and so on); anything else is Wasteland, the default. Windows High Contrast,
     /// when on, wins over the choice. Returns true when the colours changed (the caller re-applies them).
     /// </summary>
     public static bool Set(string? name)
@@ -349,12 +395,13 @@ public static class Theme
         Current = SystemInformation.HighContrast ? HighContrastPalette()
             : Display.ResolveTheme(Choice, WindowsAppsUseLight()) switch 
             {
-                LightName => LightPalette, KatsName => KatsPalette, KonekoName => KonekoPalette,
+                DarkName => DarkPalette, LightName => LightPalette,
+                WastelandLightName => WastelandLightPalette, KatsName => KatsPalette, KonekoName => KonekoPalette,
                 SerinaName => SerinaPalette, WolfieName => WolfiePalette,
                 VickraName => VickraPalette, KitomiName => KitomiPalette,
                 SzendooName => SzendooPalette,
                 TriphlxName => TriphlxPalette, TohmaName => TohmaPalette,
-                SkywolfName => SkywolfPalette, HunterName => HunterPalette, _ => DarkPalette,
+                SkywolfName => SkywolfPalette, HunterName => HunterPalette, _ => WastelandPalette,
             };
         return Current != before;
     }

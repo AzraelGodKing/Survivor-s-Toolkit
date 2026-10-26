@@ -4,11 +4,16 @@ namespace SurvivorsToolkit.Core;
 public static class Display
 {
     public const string Dark = "Dark", Light = "Light", Kats = "Kats", Koneko = "Koneko", Serina = "Serina", Wolfie = "Wolfie", Vickra = "Vickra", Kitomi = "Kitomi", Szendoo = "Szendoo",
-        Triphlx = "Triphlx", Tohma = "Tohma", Skywolf = "Skywolf", Hunter = "Hunter", System = "System";
+        Triphlx = "Triphlx", Tohma = "Tohma", Skywolf = "Skywolf", Hunter = "Hunter", System = "System",
+        Wasteland = "Wasteland", WastelandLight = "WastelandLight";
+
+    /// <summary>The theme a new install starts with: Wasteland, the 7 Days to Die look.</summary>
+    public const string Default = Wasteland;
 
     /// <summary>The themes in Options > Appearance, in the drop-down's order: saved name and the name shown.</summary>
     public static readonly (string Name, string Label)[] Themes =
     {
+        (Wasteland, "Wasteland (7 Days to Die, dark)"), (WastelandLight, "Wasteland Light (7 Days to Die, light)"),
         (Dark, "Dark"), (Light, "Light"), (Kats, "Kats (orange and gunmetal)"),
         (Koneko, "Koneko (purple and black)"), (Serina, "Serina (purple and mint green)"), (Wolfie, "Wolfie (blue and green)"),
         (Vickra, "Vickra (sapphire and emerald)"), (Kitomi, "Kitomi (red, black and cyan)"),
@@ -18,9 +23,9 @@ public static class Display
         (System, "Match Windows"),
     };
 
-    /// <summary>The saved theme choice: one of <see cref="Themes"/> ("System" follows Windows). Anything else is dark, the default.</summary>
+    /// <summary>The saved theme choice: one of <see cref="Themes"/> ("System" follows Windows). Anything else is <see cref="Default"/>.</summary>
     public static string NormalizeTheme(string? name) =>
-        Themes.Select(t => t.Name).FirstOrDefault(t => string.Equals(name, t, StringComparison.OrdinalIgnoreCase)) ?? Dark;
+        Themes.Select(t => t.Name).FirstOrDefault(t => string.Equals(name, t, StringComparison.OrdinalIgnoreCase)) ?? Default;
 
     /// <summary>
     /// The palette to use for a choice. "System" follows Windows' app mode (<paramref name="windowsAppsUseLight"/>, null

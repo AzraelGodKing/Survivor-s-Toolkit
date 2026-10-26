@@ -19,7 +19,7 @@ public sealed class AppSettings
     public string? GameFolder { get; set; }
     /// <summary>The player's data folder when not %AppData%\7DaysToDie.</summary>
     public string? UserDataFolder { get; set; }
-    public string Theme { get; set; } = Display.Dark;
+    public string Theme { get; set; } = Display.Default;
     public float TextScale { get; set; } = 1f;
     public string LaunchOptions { get; set; } = "";
     public EacMode Eac { get; set; } = EacMode.Auto;
