@@ -61,7 +61,7 @@ public sealed partial class MainForm
         playMore.AccessibleName = "More ways to play";
         var test = Btn("Test", async (_, _) => await PlayAsync(watch: true));
         var readLog = Btn("Read the log", (_, _) => OpenLog(watch: false));
-        var saves = Btn("Saves...", (_, _) => { if (_scan != null) new SavesForm(_scan.Install).Show(this); });
+        var saves = Btn("Saves...", (_, _) => OpenSaves());
         var server = Btn("Server...", async (_, _) => await OpenServerSync());
         var switchTo = Btn("Switch to it", async (_, _) => { if (PickedModlist() is { } l) await SwitchModlistAsync(l); });
         var saveAs = Btn("Save as...", (_, _) => SaveModlistAs());
@@ -920,7 +920,7 @@ public sealed partial class MainForm
         menu.Items.Add("Install a mod from a zip...", null, (_, _) => PickArchive());
         menu.Items.Add(new ToolStripMenuItem("Install a mod from a link...", null, async (_, _) => await AskLinkAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripMenuItem("Check mods for updates on GitHub...", null, async (_, _) => await CheckModUpdatesAsync()) { Enabled = _scan != null });
-        menu.Items.Add(new ToolStripMenuItem("Make an XML tweak mod...", null, (_, _) => { if (_scan != null) new TweakForm(_scan.Install, ScanAsync).Show(this); }) { Enabled = _scan != null });
+        menu.Items.Add(new ToolStripMenuItem("Make an XML tweak mod...", null, (_, _) => OpenTweaks()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Server sync...", null, async (_, _) => await OpenServerSync()) { Enabled = _scan != null });
         menu.Items.Add("Server panel and console...", null, (_, _) => OpenServerConsole());
@@ -953,8 +953,26 @@ public sealed partial class MainForm
     }
 
     /// <summary>The server panel: status over telnet and the admin console. It needs no mod scan, so it always opens.</summary>
-    void OpenServerConsole() =>
-        new ServerConsoleForm(_s, SaveSettings, ServerConfig, StartServerQuietly).Show(this);
+    void OpenServerConsole()
+    {
+        if (!Raise<ServerConsoleForm>()) new ServerConsoleForm(_s, SaveSettings, ServerConfig, StartServerQuietly).Show(this);
+    }
+
+    async Task OpenServerSyncFromHeader()
+    {
+        if (!HasGame() || Raise<ServerForm>()) return;
+        await OpenServerSync();
+    }
+
+    void OpenSaves()
+    {
+        if (HasGame() && !Raise<SavesForm>()) new SavesForm(_scan!.Install).Show(this);
+    }
+
+    void OpenTweaks()
+    {
+        if (HasGame() && !Raise<TweakForm>()) new TweakForm(_scan!.Install, ScanAsync).Show(this);
+    }
 
     async Task ExportClientPackAsync()
     {
