@@ -82,6 +82,10 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   from a backup (what it replaces is backed up first), and delete a save or a world - every delete backs the saves up
   first. Deleting only a world's map frees that space and keeps the saves: the game builds the map again from the
   world's seed when it needs it.
+- **Game update warning:** the app remembers which build of the game it last saw (Steam's build id, the version in the
+  log and the exe's date). When 7 Days to Die has been updated, it says so once and names the enabled mods most likely
+  to break: the ones with code first, since the game's own DLLs changed under them, then any that say they are for an
+  older game.
 - **Crash helper:** **Tools > What went wrong last time?** reads the game's last log, says whether the session ended
   badly (the game said so, or the log just stops), lists the errors as the log viewer groups them, and names the mod
   most of them point at - with a button that shows you that mod in the list. When the last session ended badly, the

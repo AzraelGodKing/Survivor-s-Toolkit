@@ -52,6 +52,8 @@ public sealed class AppSettings
     public RestartPlan Restarts { get; set; } = new();
     /// <summary>Look for a newer version of the app at start-up.</summary>
     public bool CheckForUpdates { get; set; } = true;
+    /// <summary>The build of the game this PC last saw, so an update to it can be pointed out once.</summary>
+    public GameBuild? SeenGameBuild { get; set; }
     /// <summary>The log a crash note has already been shown for ("path|ticks"), so the same crash isn't mentioned twice.</summary>
     public string? SeenCrashLog { get; set; }
     /// <summary>A version the player said not to be reminded about again.</summary>

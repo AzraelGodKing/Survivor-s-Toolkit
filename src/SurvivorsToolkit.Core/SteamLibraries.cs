@@ -79,6 +79,26 @@ public sealed class SteamLibraries
         return null;
     }
 
+    /// <summary>
+    /// Steam's build id for <paramref name="appId"/> (buildid in its appmanifest), which changes with every update to
+    /// the app; null when Steam or the manifest can't be read.
+    /// </summary>
+    public string? AppBuildId(string appId)
+    {
+        foreach (var lib in Libraries)
+        {
+            var manifest = Path.Combine(lib, "steamapps", $"appmanifest_{appId}.acf");
+            try
+            {
+                if (!File.Exists(manifest)) continue;
+                if (KeyValues.Parse(File.ReadAllText(manifest)).Block("AppState")?.Value("buildid") is { Length: > 0 } id) return id;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+        return null;
+    }
+
     /// <summary>The Workshop content folder for <paramref name="appId"/> in the library holding <paramref name="gameFolder"/> (or any library).</summary>
     public string? WorkshopFolder(string appId, string? gameFolder)
     {

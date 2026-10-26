@@ -676,6 +676,21 @@ public sealed partial class MainForm
         new LogForm(_scan, watch, id => { Activate(); SelectMod(id); }, modId).Show(this);
     }
 
+    /// <summary>
+    /// At start-up: when the game is a different build than the one last seen, say so once and name the enabled mods
+    /// most likely to break - the ones with code first, since the game's own DLLs changed under them.
+    /// </summary>
+    bool NoteGameUpdate()
+    {
+        if (_scan == null || _analysis == null) return false;
+        var now = GameUpdate.Current(_steam, _scan.Install, _analysis);
+        var warning = GameUpdate.Check(_s.SeenGameBuild, now, _scan.Mods, _analysis);
+        if (now.Known && (_s.SeenGameBuild == null || warning.Updated)) { _s.SeenGameBuild = now; SaveSettings(); }
+        if (warning.Note is not { } note) return false;
+        ShowNote(note, Tone.Warn);
+        return true;
+    }
+
     /// <summary>The crash helper: the last log read down to "it looks like this mod".</summary>
     void OpenCrashHelper()
     {
@@ -693,22 +708,24 @@ public sealed partial class MainForm
     static string? CrashKey(CrashReport report) => report.LogPath == null ? null : report.LogPath + "|" + report.Written.Ticks;
 
     /// <summary>
-    /// At start-up: when the last session ended badly and it hasn't been mentioned yet, say so once. The helper itself
-    /// is a click away in Tools; nothing is opened over the player's window.
+    /// At start-up: when the last session ended badly and it hasn't been mentioned yet, say so once, and say whether
+    /// it did. The helper itself is a click away in Tools; nothing is opened over the player's window.
     /// </summary>
-    void NoteLastCrash()
+    bool NoteLastCrash()
     {
-        if (_scan == null) return;
+        if (_scan == null) return false;
         try
         {
             var report = Crash.Check(_scan.Install, _scan.Mods);
-            if (!report.Crashed || CrashKey(report) is not { } key || key == _s.SeenCrashLog) return;
+            if (!report.Crashed || CrashKey(report) is not { } key || key == _s.SeenCrashLog) return false;
             _s.SeenCrashLog = key;
             SaveSettings();
             var mod = report.SuspectModId is { } id ? _scan.Mods.FirstOrDefault(m => m.Id == id)?.DisplayName : null;
             ShowNote($"The game's last session ended badly{(mod != null ? $", and most of the errors point at {mod}" : "")}. Tools > What went wrong last time has the details.", Tone.Warn);
+            return true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        return false;
     }
 
     // ------------------------------------------------------------ modlists
