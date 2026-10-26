@@ -83,7 +83,7 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
 - **Tools:** **Find the broken mod for me** (enables half the suspects each round until one is left, then puts your
   mods back), the Mods and backup folders, and **Verify the game files in Steam**.
 - **Saves...:** every save with its world, when it was last played and its size, with **Back up** to a zip.
-- **Options:** theme (Dark, Light, Kats, Koneko, Serina, Wolfie, Vickra, Kitomi, Szendoo, Triphlx, Tohma, Skywolf,
+- **Options:** theme (Wasteland, the default, and Wasteland Light, styled after 7 Days to Die; Dark, Light, Kats, Koneko, Serina, Wolfie, Vickra, Kitomi, Szendoo, Triphlx, Tohma, Skywolf,
   Hunter, or Match Windows; Windows High Contrast always wins), text size, the game and data folders, where new mods
   are installed, EasyAntiCheat and launch options.
 
@@ -125,7 +125,7 @@ GitHub workflow builds and tests every push and pull request and uploads a self-
 
 `src/SurvivorsToolkit.Core` holds everything that needs no WinForms (finding the game, reading mods, installing,
 modlists, problems, the log, saves, the command line) and is what the tests cover. `src/SurvivorsToolkit` is the
-window. `Theme.cs` is ModWright's, unchanged apart from its namespace.
+window. `Theme.cs` is ModWright's, plus the two Wasteland themes.
 
 ## Releasing
 

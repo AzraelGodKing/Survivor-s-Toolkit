@@ -87,13 +87,17 @@ public class DisplayTests
 {
     [Fact]
     public void HasEveryModWrightTheme() =>
-        Assert.Equal(new[] { "Dark", "Light", "Kats", "Koneko", "Serina", "Wolfie", "Vickra", "Kitomi", "Szendoo", "Triphlx", "Tohma", "Skywolf", "Hunter", "System" }, Display.Themes.Select(t => t.Name));
+        Assert.Equal(new[] { "Wasteland", "WastelandLight", "Dark", "Light", "Kats", "Koneko", "Serina", "Wolfie", "Vickra", "Kitomi", "Szendoo", "Triphlx", "Tohma", "Skywolf", "Hunter", "System" }, Display.Themes.Select(t => t.Name));
 
     [Theory]
     [InlineData("wolfie", "Wolfie")]
-    [InlineData("nonsense", "Dark")]
-    [InlineData(null, "Dark")]
+    [InlineData("wastelandlight", "WastelandLight")]
+    [InlineData("nonsense", "Wasteland")]
+    [InlineData(null, "Wasteland")]
     public void NormalizesThemeNames(string? name, string expected) => Assert.Equal(expected, Display.NormalizeTheme(name));
+
+    [Fact]
+    public void NewInstallsStartOnWasteland() => Assert.Equal("Wasteland", new AppSettings().Theme);
 
     [Fact]
     public void SystemFollowsWindows()
