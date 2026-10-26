@@ -826,6 +826,7 @@ public sealed partial class MainForm
         menu.Items.Add(new ToolStripMenuItem("Check mods for updates on GitHub...", null, async (_, _) => await CheckModUpdatesAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Server sync...", null, async (_, _) => await OpenServerSync()) { Enabled = _scan != null });
+        menu.Items.Add("Server panel and console...", null, (_, _) => OpenServerConsole());
         menu.Items.Add(new ToolStripMenuItem("Export a client pack for players...", null, async (_, _) => await ExportClientPackAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Open the game's Mods folder", null, (_, _) => { Directory.CreateDirectory(_scan!.Install.GameMods); Ui.Open(this, _scan.Install.GameMods); }) { Enabled = _scan != null });
@@ -852,6 +853,10 @@ public sealed partial class MainForm
         if (_scan == null) return;
         new ServerForm(_s, _scan, Side, SaveSettings).Show(this);
     }
+
+    /// <summary>The server panel: status over telnet and the admin console. It needs no mod scan, so it always opens.</summary>
+    void OpenServerConsole() =>
+        new ServerConsoleForm(_s, SaveSettings, ServerConfig).Show(this);
 
     async Task ExportClientPackAsync()
     {

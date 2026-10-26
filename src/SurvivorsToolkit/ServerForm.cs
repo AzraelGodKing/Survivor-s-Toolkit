@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using static SurvivorsToolkit.Ui;
 
 namespace SurvivorsToolkit;
@@ -92,7 +90,7 @@ sealed class ServerForm : Form
         _host.Text = t.Host;
         _port.Value = Math.Clamp(t.Port, 1, 65535);
         _user.Text = t.User;
-        _password.Text = Unprotect(t.ProtectedPassword);
+        _password.Text = Secrets.Unprotect(t.ProtectedPassword);
         _remotePath.Text = t.RemotePath;
         _filling = false;
         ShowRows();
@@ -115,7 +113,7 @@ sealed class ServerForm : Form
         t.Host = _host.Text.Trim();
         t.Port = (int)_port.Value;
         t.User = _user.Text.Trim();
-        t.ProtectedPassword = _password.Text.Length == 0 ? null : Protect(_password.Text);
+        t.ProtectedPassword = Secrets.Protect(_password.Text);
         t.RemotePath = _remotePath.Text.Trim().Length == 0 ? "Mods" : _remotePath.Text.Trim();
         _saveSettings();
     }
@@ -253,15 +251,5 @@ sealed class ServerForm : Form
     {
         using var f = _s.Server.Open(_password.Text);
         return f.Describe;
-    }
-
-    static string Protect(string password) =>
-        Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(password), null, DataProtectionScope.CurrentUser));
-
-    static string Unprotect(string? protectedPassword)
-    {
-        if (string.IsNullOrEmpty(protectedPassword)) return "";
-        try { return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(protectedPassword), null, DataProtectionScope.CurrentUser)); }
-        catch (Exception e) when (e is CryptographicException or FormatException) { return ""; }
     }
 }
