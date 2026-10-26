@@ -1,4 +1,6 @@
-# 7 Days Mod Manager
+# Survivor's Toolkit
+
+*Craft your 7d2d experience.*
 
 A Windows mod manager for **7 Days to Die**, built on the player side of
 [ModWright](https://github.com/AzraelGodKing/ModWright) (The Drop Pod): the same .NET 8 WinForms stack, the same
@@ -66,7 +68,7 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   that this PC doesn't are left alone. Restart the server afterwards. SFTP isn't supported.
 - **Client pack:** **Tools > Export a client pack for players** zips the enabled mods players need (Client only, or
   Server + clients) into one file, with the profile and a readme inside, so players' mods match the server's. They
-  drop it on 7 Days Mod Manager, or unzip it into their game folder.
+  drop it on Survivor's Toolkit, or unzip it into their game folder.
 - **Settings:** **Settings...** beside the list (or right-click > **Edit settings...**) opens a mod's settings files
   (`settings.txt`, `*.cfg` and the like, not readmes or examples). A file of `Key=value` lines is shown as a form,
   each setting with the author's comment above it and on/off switches as drop-downs; **Text** edits any file as
@@ -92,49 +94,55 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   read. Turn the check off, or **Check now**, under **Options > About**. Only the single-file exe updates itself; a
   copy built with `dotnet build` offers the release page instead.
 
-Settings, profiles (the `modlists` folder) and backups are in `%LocalAppData%\SevenDaysModManager`.
+Settings, profiles (the `modlists` folder) and backups are in `%LocalAppData%\SurvivorsToolkit`.
 
 ## Command line
 
 ```
-SevenDaysModManager list [--json]         the installed mods (* = enabled)
-SevenDaysModManager problems [--json]     problems with the enabled mods (exit code 1 on errors)
-SevenDaysModManager lists                 the saved profiles (* = last used)
-SevenDaysModManager switch <profile>      enable exactly the mods of a profile ("vanilla" turns every mod off)
-SevenDaysModManager play [<profile>]      start the game, after switching to the profile
-SevenDaysModManager install <zip|folder|link>  install a mod
-SevenDaysModManager updates               newer versions of installed mods on GitHub
-SevenDaysModManager server                start the dedicated server on this PC
+SurvivorsToolkit list [--json]         the installed mods (* = enabled)
+SurvivorsToolkit problems [--json]     problems with the enabled mods (exit code 1 on errors)
+SurvivorsToolkit lists                 the saved profiles (* = last used)
+SurvivorsToolkit switch <profile>      enable exactly the mods of a profile ("vanilla" turns every mod off)
+SurvivorsToolkit play [<profile>]      start the game, after switching to the profile
+SurvivorsToolkit install <zip|folder|link>  install a mod
+SurvivorsToolkit updates               newer versions of installed mods on GitHub
+SurvivorsToolkit server                start the dedicated server on this PC
 ```
 
-A desktop shortcut to `SevenDaysModManager.exe play "Horde night"` starts that setup in one click.
+A desktop shortcut to `SurvivorsToolkit.exe play "Horde night"` starts that setup in one click.
 
 ## Build
 
-Needs the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). Unlike the mods in this repo, it needs no
-game files.
+Needs the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). No game files are needed.
 
 ```powershell
-cd ModManager
-dotnet build ModManager.sln -c Release
-dotnet test ModManager.sln
+dotnet build SurvivorsToolkit.sln -c Release
+dotnet test SurvivorsToolkit.sln
 ```
 
-The app is `src\SevenDaysModManager\bin\Release\net8.0-windows\SevenDaysModManager.exe`. The **Mod Manager**
-GitHub workflow builds and tests every change under `ModManager/` and uploads a self-contained single-file exe.
+The app is `src\SurvivorsToolkit\bin\Release\net8.0-windows\SurvivorsToolkit.exe`. The **Build**
+GitHub workflow builds and tests every push and pull request and uploads a self-contained single-file exe.
 
-`src/SevenDaysModManager.Core` holds everything that needs no WinForms (finding the game, reading mods, installing,
-modlists, problems, the log, saves, the command line) and is what the tests cover. `src/SevenDaysModManager` is the
+`src/SurvivorsToolkit.Core` holds everything that needs no WinForms (finding the game, reading mods, installing,
+modlists, problems, the log, saves, the command line) and is what the tests cover. `src/SurvivorsToolkit` is the
 window. `Theme.cs` is ModWright's, unchanged apart from its namespace.
 
 ## Releasing
 
-Bump `<Version>` in `ModManager/Directory.Build.props` on `main`, then run the **Release Mod Manager** workflow
-(Actions tab), optionally with change notes. It tests, publishes `SevenDaysModManager-<version>-win-x64.exe` and
-`SHA256SUMS.txt`, and creates the release `ModManager-v<version>`, which is what the app's update check looks for. The
-mods' releases (`<ModName>-v<version>`) are ignored by it, and the app's releases are never marked "latest".
+Bump `<Version>` in `Directory.Build.props` on `main`, then run the **Release** workflow
+(Actions tab), optionally with change notes. It tests, publishes `SurvivorsToolkit-<version>-win-x64.exe` and
+`SHA256SUMS.txt`, and creates the release `v<version>`, which is what the app's update check looks for.
 
 ## Not carried over from ModWright
 
 The Launch Pad (Workshop uploads; 7 Days to Die has no Workshop), SteamCMD, Workshop and Thunderstore downloads,
 load-order sorting (the game has no load-order file), and RimWorld's instances, XML and texture tools.
+
+## History and branches
+
+Survivor's Toolkit started as the 7 Days Mod Manager in
+[7d2d_mods](https://github.com/AzraelGodKing/7d2d_mods) (`ModManager/`), and this repository keeps its history. The
+first run copies the old settings, modlists and backups from `%LocalAppData%\SevenDaysModManager` to
+`%LocalAppData%\SurvivorsToolkit`.
+
+Work goes into the long-lived `test` branch first, then `test` is merged into `main`. `test` is never deleted.

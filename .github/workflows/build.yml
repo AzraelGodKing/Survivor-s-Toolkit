@@ -1,0 +1,26 @@
+# Builds and tests Survivor's Toolkit and uploads a single-file exe as an artifact.
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build
+        run: dotnet build SurvivorsToolkit.sln -c Release
+      - name: Test
+        run: dotnet test SurvivorsToolkit.sln -c Release --no-build
+      - name: Publish single-file exe
+        run: dotnet publish src/SurvivorsToolkit/SurvivorsToolkit.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SurvivorsToolkit-win-x64
+          path: publish/SurvivorsToolkit.exe

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>SurvivorsToolkit</RootNamespace>
+    <AssemblyName>SurvivorsToolkit</AssemblyName>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <Product>Survivor's Toolkit</Product>
+    <Description>Craft your 7d2d experience. A mod manager for 7 Days to Die: turn mods on and off, install from zips, modlists, problems and the game's log.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Keeps the server's FTP password encrypted for the Windows user (DPAPI). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SurvivorsToolkit.Core\SurvivorsToolkit.Core.csproj" />
+    <Using Include="SurvivorsToolkit.Core" />
+  </ItemGroup>
+</Project>
