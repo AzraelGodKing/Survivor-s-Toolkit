@@ -46,7 +46,7 @@ public sealed partial class MainForm : Form
             if (updatedFrom != null) ShowNote($"Updated from {updatedFrom} to {UpdateCheck.CurrentVersion}.", Tone.Ok);
             await ScanAsync();
             // A crash is the more urgent of the two notes, so it wins the one line there is.
-            if (!NoteLastCrash()) NoteGameUpdate();
+            if (!await NoteLastCrashAsync()) await NoteGameUpdateAsync();
             if (_s.CheckForUpdates) await CheckForUpdateAsync(quiet: true);
         };
         DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true || DroppedLink(e.Data) != null ? DragDropEffects.Copy : DragDropEffects.None;
@@ -126,6 +126,7 @@ public sealed partial class MainForm : Form
     void ApplyTheme()
     {
         foreach (Form f in Application.OpenForms) Theme.Apply(f);
+        _checked = (null, new(), default); // the problems list is coloured too
         FillList();
     }
 
