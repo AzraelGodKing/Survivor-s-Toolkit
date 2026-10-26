@@ -43,6 +43,17 @@ public static class Display
     /// <summary>A label's text without its "&amp;" access key marks, as screen readers should say it.</summary>
     public static string StripMnemonic(string text) => text.Replace("&&", "\0").Replace("&", "").Replace("\0", "&");
 
+    /// <summary>How long until something, as people say it: "in 4 minutes", "in 2 hours 10 minutes", "now".</summary>
+    public static string In(TimeSpan left)
+    {
+        if (left <= TimeSpan.Zero) return "now";
+        if (left < TimeSpan.FromMinutes(1)) return "in less than a minute";
+        var hours = (int)left.TotalHours;
+        var minutes = left.Minutes;
+        if (hours == 0) return $"in {minutes} minute{(minutes == 1 ? "" : "s")}";
+        return $"in {hours} hour{(hours == 1 ? "" : "s")}" + (minutes > 0 ? $" {minutes} minute{(minutes == 1 ? "" : "s")}" : "");
+    }
+
     /// <summary>A byte count as people read it: "512 B", "1.4 MB".</summary>
     public static string Size(long bytes)
     {

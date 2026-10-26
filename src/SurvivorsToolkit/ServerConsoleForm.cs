@@ -12,6 +12,7 @@ sealed class ServerConsoleForm : Form
     readonly AppSettings _s;
     readonly Action _saveSettings;
     readonly Func<string?> _localConfig;
+    readonly Func<bool> _startServer;
 
     readonly TextBox _host = new() { Width = 220, PlaceholderText = "127.0.0.1 or your host's address" };
     readonly NumericUpDown _port = new() { Minimum = 1, Maximum = 65535, Value = 8081, Width = 90 };
@@ -36,11 +37,12 @@ sealed class ServerConsoleForm : Form
     IServerConsole? _console;
     bool _busy, _filling;
 
-    public ServerConsoleForm(AppSettings s, Action saveSettings, Func<string?> localConfig)
+    public ServerConsoleForm(AppSettings s, Action saveSettings, Func<string?> localConfig, Func<bool> startServer)
     {
         _s = s;
         _saveSettings = saveSettings;
         _localConfig = localConfig;
+        _startServer = startServer;
         Text = "Server panel - Survivor's Toolkit";
         Font = Theme.BodyFont;
         Size = new Size(1040, 820);
@@ -53,7 +55,8 @@ sealed class ServerConsoleForm : Form
         _fromConfig = SmallBtn("Read the server's config", (_, _) => FromLocalConfig());
         _send = SmallBtn("Send", async (_, _) => await SendTypedAsync()).Role(ThemeRole.Accent);
 
-        var setup = Card("Console", new Control[] { _connect, _disconnect },
+        var restarts = SmallBtn("Scheduled restarts...", (_, _) => { Keep(); new RestartsForm(_s, _saveSettings, _startServer).Show(this); });
+        var setup = Card("Console", new Control[] { restarts, _connect, _disconnect },
             Row(Lbl("Address"), _host, Lbl("Port"), _port, Lbl("Password"), _password, _fromConfig),
             Row(Lbl("Blood moon every"), _bloodMoon, Muted("days (BloodMoonFrequency); 0 turns the countdown off"), _auto),
             Row(Muted("The server needs TelnetEnabled true, a TelnetPassword and its TelnetPort reachable. The password is kept encrypted for your Windows account. A host's panel usually lists the telnet port under its console or RCON settings.")));
