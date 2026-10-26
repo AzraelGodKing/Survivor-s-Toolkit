@@ -5,6 +5,10 @@
     <RootNamespace>SurvivorsToolkit.Core</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Keeps the server passwords in the settings encrypted for the Windows user (DPAPI). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="SurvivorsToolkit.Tests" />
   </ItemGroup>
 </Project>

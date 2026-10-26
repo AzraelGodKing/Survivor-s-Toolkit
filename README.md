@@ -66,6 +66,16 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   encrypted for your Windows account. Only files that differ are sent, and files a mod no longer has are removed.
   Mods that are only for players, or disabled here, can be removed from the server (tick them); mods the server has
   that this PC doesn't are left alone. Restart the server afterwards. SFTP isn't supported.
+- **Server panel and console:** **Tools > Server panel and console** talks to a server's telnet console, so you can see
+  whether it is up, who is on it (health, deaths, zombies killed, level, ping), the in-game day and clock, the next
+  blood moon and the game's version, refreshed every 15 seconds. Under it is an admin console: type any command, or use
+  the buttons for **Say**, **Save the world**, **Shut down** and the command list, and right-click a player to kick or
+  ban them. The up and down arrows walk back through what you have typed, and anything that can't be taken back
+  (`shutdown`, `kick`, `ban`) asks first. It works with a server on this PC and with a hosted one: the server needs
+  `TelnetEnabled` true, a `TelnetPassword` and its `TelnetPort` reachable. **Read the server's config** fills the
+  address, port, password and blood moon frequency in from the dedicated server's own `serverconfig.xml` when there is
+  one on this PC; for a hosted server, copy them from your host's panel. The password is kept encrypted for your
+  Windows account.
 - **Client pack:** **Tools > Export a client pack for players** zips the enabled mods players need (Client only, or
   Server + clients) into one file, with the profile and a readme inside, so players' mods match the server's. They
   drop it on Survivor's Toolkit, or unzip it into their game folder.
@@ -107,6 +117,8 @@ SurvivorsToolkit play [<profile>]      start the game, after switching to the pr
 SurvivorsToolkit install <zip|folder|link>  install a mod
 SurvivorsToolkit updates               newer versions of installed mods on GitHub
 SurvivorsToolkit server                start the dedicated server on this PC
+SurvivorsToolkit status [--json]       the server's day, players and blood moon, over its telnet console
+SurvivorsToolkit rcon <command>        send one command to that console ("say hello", "saveworld")
 ```
 
 A desktop shortcut to `SurvivorsToolkit.exe play "Horde night"` starts that setup in one click.

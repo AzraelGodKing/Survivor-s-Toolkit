@@ -13,11 +13,13 @@ namespace SurvivorsToolkit.Core;
 /// SurvivorsToolkit install &lt;zip|folder|link&gt; install a mod
 /// SurvivorsToolkit updates              newer versions of installed mods on GitHub
 /// SurvivorsToolkit server               start the dedicated server on this PC
+/// SurvivorsToolkit status [--json]      the server's day, players and blood moon over its telnet console
+/// SurvivorsToolkit rcon &lt;command&gt;       send one command to the server's telnet console
 /// </code>
 /// </summary>
 public static class Cli
 {
-    public static readonly string[] Commands = { "list", "problems", "lists", "switch", "play", "install", "updates", "server", "help", "--help", "-h", "/?" };
+    public static readonly string[] Commands = { "list", "problems", "lists", "switch", "play", "install", "updates", "server", "status", "rcon", "help", "--help", "-h", "/?" };
 
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0].ToLowerInvariant());
 
@@ -27,6 +29,9 @@ public static class Cli
         var json = args.Contains("--json");
         var rest = args.Skip(1).Where(a => a != "--json").ToList();
         if (cmd is "help" or "--help" or "-h" or "/?") { o.WriteLine(Help); return 0; }
+
+        // These two only talk to the server's console, so they don't need the game installed here.
+        if (cmd is "status" or "rcon") return Console_(cmd, rest, s, o, json).GetAwaiter().GetResult();
 
         var steam = SteamLibraries.Find();
         var install = SevenDays.Detect(steam, s.GameFolder, s.UserDataFolder);
@@ -107,6 +112,35 @@ public static class Cli
         return 2;
     }
 
+    /// <summary>status and rcon: one telnet link to the server in the settings, then the answer as text or JSON.</summary>
+    static async Task<int> Console_(string cmd, List<string> rest, AppSettings s, TextWriter o, bool json)
+    {
+        if (!s.Telnet.IsSet) { o.WriteLine("No server console is set up. Open the app, Tools > Server panel and console, and fill in the address, port and password."); return 2; }
+        if (cmd == "rcon" && rest.Count == 0) { o.WriteLine("Usage: rcon <command>   for example  rcon \"say hello\""); return 2; }
+        try
+        {
+            using var console = await TelnetConsole.ConnectAsync(s.Telnet.Host, s.Telnet.Port, Secrets.Unprotect(s.Telnet.ProtectedPassword));
+            if (cmd == "rcon")
+            {
+                o.WriteLine(await console.SendAsync(string.Join(' ', rest), CancellationToken.None));
+                return 0;
+            }
+            var status = await ServerStatusReader.QueryAsync(console, s.Telnet.BloodMoonFrequency);
+            if (json) o.WriteLine(JsonSerializer.Serialize(status, new JsonSerializerOptions { WriteIndented = true }));
+            else
+            {
+                o.WriteLine($"{s.Telnet.Describe}: up, {status.Clock}, {status.Players} player{(status.Players == 1 ? "" : "s")}, blood moon {status.BloodMoon}{(status.Version is { } v ? ", game " + v : "")}");
+                foreach (var p in status.PlayerList) o.WriteLine($"  {p.Name}  health {p.Health}, level {p.Level}, ping {p.Ping}");
+            }
+            return 0;
+        }
+        catch (ServerConsoleException e)
+        {
+            o.WriteLine(e.Message);
+            return 1;
+        }
+    }
+
     static bool Switch(string name, LibraryScan scan, ModlistStore store, AppSettings s, TextWriter o)
     {
         var list = store.Get(name);
@@ -135,5 +169,7 @@ public static class Cli
           SurvivorsToolkit install <zip|folder|link>  install a mod (an installed copy is replaced, after a backup)
           SurvivorsToolkit updates               newer versions of installed mods on GitHub
           SurvivorsToolkit server                start the dedicated server on this PC (its config is backed up first)
+          SurvivorsToolkit status [--json]       the server's day, players and blood moon, over its telnet console
+          SurvivorsToolkit rcon <command>        send one command to that console ("say hello", "saveworld")
         """;
 }
