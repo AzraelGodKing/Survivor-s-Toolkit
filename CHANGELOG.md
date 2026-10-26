@@ -3,6 +3,14 @@
 Each `## <version>` section is shown in the app once after it updates to that version (and all of them under
 **Options > About > What's new**), and the Release workflow uses it as the release's notes.
 
+## 0.3.0
+
+- **Tools in the header bar.** SERVER, SYNC, SAVES, LOG, CRASH and TWEAKS sit next to MODS and OPTIONS and open their
+  windows in one click (Alt+E, Y, A, L, C, T). Clicking a tab whose window is already open brings that window back
+  instead of opening a second copy.
+- Tools that need the game say so when it hasn't been found yet.
+- On a narrow window the tagline hides so the tabs keep their room.
+
 ## 0.2.0
 
 - **Updates install when you close the app.** After **Update now** downloads and checks a new version, pick

@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Authors>Azrael</Authors>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <!-- Keep the product version plain ("0.1.0", not "0.1.0+commit"): the self-update compares it with the release tag. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Copyright>Copyright (c) 2026 Azrael</Copyright>
