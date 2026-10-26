@@ -1,19 +1,36 @@
 # Builds and tests Survivor's Toolkit and uploads a single-file exe as an artifact.
+# Runs on every push to main and test (so each PR merged into test gets a build), and on pull requests into them.
 name: Build
 
 on:
   push:
+    branches: [main, test]
   pull_request:
+    branches: [main, test]
   workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Read version
+        id: meta
+        run: |
+          $v = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "sha=$('${{ github.sha }}'.Substring(0, 7))" >> $env:GITHUB_OUTPUT
+          "branch=$('${{ github.head_ref || github.ref_name }}' -replace '[^A-Za-z0-9._-]', '-')" >> $env:GITHUB_OUTPUT
       - name: Build
         run: dotnet build SurvivorsToolkit.sln -c Release
       - name: Test
@@ -22,5 +39,6 @@ jobs:
         run: dotnet publish src/SurvivorsToolkit/SurvivorsToolkit.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true -o publish
       - uses: actions/upload-artifact@v4
         with:
-          name: SurvivorsToolkit-win-x64
+          name: SurvivorsToolkit-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.branch }}-${{ steps.meta.outputs.sha }}-win-x64
           path: publish/SurvivorsToolkit.exe
+          if-no-files-found: error
