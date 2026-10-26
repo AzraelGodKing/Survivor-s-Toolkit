@@ -8,6 +8,8 @@ public sealed record GameInstall(string GameFolder, string UserDataFolder)
     public string GameMods => Path.Combine(GameFolder, SevenDays.ModsFolderName);
     public string UserMods => Path.Combine(UserDataFolder, SevenDays.ModsFolderName);
     public string Saves => Path.Combine(UserDataFolder, "Saves");
+    /// <summary>The game's own config XML (items.xml, blocks.xml and the rest), which the tweak builder reads.</summary>
+    public string ConfigFolder => Path.Combine(GameFolder, "Data", "Config");
 }
 
 /// <summary>How to start the game: a program (or a steam:// link opened by Windows) and its arguments.</summary>

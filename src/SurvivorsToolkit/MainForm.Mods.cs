@@ -885,6 +885,7 @@ public sealed partial class MainForm
         menu.Items.Add("Install a mod from a zip...", null, (_, _) => PickArchive());
         menu.Items.Add(new ToolStripMenuItem("Install a mod from a link...", null, async (_, _) => await AskLinkAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripMenuItem("Check mods for updates on GitHub...", null, async (_, _) => await CheckModUpdatesAsync()) { Enabled = _scan != null });
+        menu.Items.Add(new ToolStripMenuItem("Make an XML tweak mod...", null, (_, _) => { if (_scan != null) new TweakForm(_scan.Install, ScanAsync).Show(this); }) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Server sync...", null, async (_, _) => await OpenServerSync()) { Enabled = _scan != null });
         menu.Items.Add("Server panel and console...", null, (_, _) => OpenServerConsole());
