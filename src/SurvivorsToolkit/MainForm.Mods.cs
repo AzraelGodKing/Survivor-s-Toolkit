@@ -33,7 +33,11 @@ public sealed partial class MainForm
     HashSet<string> _enabled = new();
     readonly EditHistory _history = new();
     List<ModProblem> _found = new();
-    bool _dirty, _filling, _busy;
+    bool _dirty, _filling, _busy, _refillQueued;
+    /// <summary>What <see cref="_found"/> was worked out for, so refilling the list doesn't redo the checks.</summary>
+    (LibraryScan? Scan, HashSet<string> Enabled, EacMode Eac) _checked = (null, new(), default);
+    /// <summary>Waits for typing in the filter to stop before the list is refilled.</summary>
+    readonly System.Windows.Forms.Timer _filterTimer = new() { Interval = 200 };
     Bisect? _bisect;
 
     ModlistStore Store => new(AppSettings.ModlistFolder);
@@ -100,7 +104,8 @@ public sealed partial class MainForm
         _list.ContextMenuStrip = new ContextMenuStrip();
         _list.ContextMenuStrip.Opening += (_, e) => { e.Cancel = !FillRowMenu(_list.ContextMenuStrip); };
         _list.DoubleClick += (_, _) => { if (Selected() is { } m) Ui.Open(this, m.Folder); };
-        _filter.TextChanged += (_, _) => FillList();
+        _filterTimer.Tick += (_, _) => { _filterTimer.Stop(); FillList(); };
+        _filter.TextChanged += (_, _) => { _filterTimer.Stop(); _filterTimer.Start(); };
         _filter.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { _filter.Text = ""; e.SuppressKeyPress = true; } };
         var install = SmallBtn("Install...", (_, _) => PickArchive());
         _undo = SmallBtn("Undo changes", (_, _) => { if (_scan == null) return; _history.Push(_enabled); SetEnabled(EnabledOnDisk()); });
@@ -159,7 +164,8 @@ public sealed partial class MainForm
         UseWaitCursor = true;
         try
         {
-            var install = SevenDays.Detect(_steam, _s.GameFolder, _s.UserDataFolder);
+            var (gameFolder, userDataFolder) = (_s.GameFolder, _s.UserDataFolder);
+            var install = await Task.Run(() => SevenDays.Detect(_steam, gameFolder, userDataFolder));
             if (install == null)
             {
                 _scan = null;
@@ -170,14 +176,21 @@ public sealed partial class MainForm
                 FillList();
                 return;
             }
-            (_scan, _analysis) = await Task.Run(() =>
+            var chosen = new Dictionary<string, ModSide>(_s.Sides, _s.Sides.Comparer);
+            // Everything that reads the mods' files is done here, off the window's thread, once per scan.
+            var (scan, analysis, sides, settings) = await Task.Run(() =>
             {
                 var scan = ModLibrary.Scan(install);
                 var analysis = ModAnalysis.For(install);
                 foreach (var m in scan.Mods) analysis.XmlOf(m);
-                return (scan, analysis);
+                var sides = scan.Mods.Where(m => !m.Locked).ToDictionary(m => m.Id, m => ModSides.Of(m, chosen.TryGetValue(m.Key, out var c) ? c : null));
+                var settings = scan.Mods.Where(m => ModSettingsStore.FilesOf(m.Folder).Count > 0).Select(m => m.Id).ToHashSet();
+                return (scan, analysis, sides, settings);
             });
+            (_scan, _analysis) = (scan, analysis);
             _sides.Clear();
+            foreach (var (id, side) in sides) _sides[id] = side;
+            _hasSettings = settings;
             _gameText.Text = $"{install.GameFolder}    ·    data: {install.UserDataFolder}{(_analysis?.Game is { } v ? "    ·    game " + v : "")}";
             _gameText.ForeColor = Theme.Of(Tone.Normal);
             _history.Clear();
@@ -268,8 +281,15 @@ public sealed partial class MainForm
         if (item.Checked) _enabled.Add(m.Id); else _enabled.Remove(m.Id);
         _dirty = !_enabled.SetEquals(EnabledOnDisk());
         item.ForeColor = item.Checked ? Theme.Current.Text : Theme.Current.Muted;
-        // The load order column changes for every row after this one; cheap enough to refill once typing stops.
-        BeginInvoke(FillList);
+        // The load order column changes for every row after this one; refill once, however many rows were ticked.
+        QueueFillList();
+    }
+
+    void QueueFillList()
+    {
+        if (_refillQueued) return;
+        _refillQueued = true;
+        BeginInvoke(() => { _refillQueued = false; FillList(); });
     }
 
     void UndoRedo(bool undo)
@@ -296,6 +316,9 @@ public sealed partial class MainForm
         _save.Enabled = _undo.Enabled = _dirty && _bisect == null;
         _play.Enabled = true;
 
+        // Refilling the list (the filter, a sort, a colour) doesn't change the problems; only the ticks, the scan and EAC do.
+        if (_checked.Scan == _scan && _checked.Eac == _s.Eac && _checked.Enabled.SetEquals(_enabled)) { ShowDetails(); return; }
+        _checked = (_scan, new HashSet<string>(_enabled), _s.Eac);
         var before = _found;
         _found = Problems.Check(_scan, _enabled, _s.Eac, _analysis);
         _problems.BeginUpdate();
@@ -312,7 +335,7 @@ public sealed partial class MainForm
         _problemCount.Text = _found.Count == 0 ? "" : $"{errors} error{(errors == 1 ? "" : "s")}, {_found.Count - errors} warning{(_found.Count - errors == 1 ? "" : "s")}";
         _fix.Enabled = false;
         // Problem colours on the rows follow the problems; refill once when they change.
-        if (!before.Select(p => p.ModId).SequenceEqual(_found.Select(p => p.ModId)) && !_filling) BeginInvoke(FillList);
+        if (!before.Select(p => p.ModId).SequenceEqual(_found.Select(p => p.ModId)) && !_filling) QueueFillList();
         ShowDetails();
     }
 
@@ -322,7 +345,7 @@ public sealed partial class MainForm
     void ShowDetails()
     {
         var m = Selected();
-        _details.Show(m, m == null ? null : Note(m), m == null || m.Locked ? null : Side(m), m != null && ModSettingsStore.FilesOf(m.Folder).Count > 0);
+        _details.Show(m, m == null ? null : Note(m), m == null || m.Locked ? null : Side(m), m != null && HasSettings(m));
     }
 
     void SelectMod(string id)
@@ -343,6 +366,11 @@ public sealed partial class MainForm
     {
         if (SelectedProblem()?.ModId is { } id) SelectMod(id);
     }
+
+    /// <summary>The mods with settings files, found once per scan.</summary>
+    HashSet<string> _hasSettings = new();
+
+    bool HasSettings(InstalledMod m) => _hasSettings.Contains(m.Id);
 
     string Note(InstalledMod m) => _s.Notes.GetValueOrDefault(m.Key) ?? "";
 
@@ -370,7 +398,8 @@ public sealed partial class MainForm
     {
         if (side is { } s) _s.Sides[m.Key] = s; else _s.Sides.Remove(m.Key);
         SaveSettings();
-        _sides.Clear();
+        // The choice is by Name, so a copy of the mod in the other Mods folder follows it.
+        foreach (var o in _scan?.Mods.Where(o => string.Equals(o.Key, m.Key, StringComparison.OrdinalIgnoreCase)) ?? new[] { m }) _sides.Remove(o.Id);
         FillList();
     }
 
@@ -387,7 +416,7 @@ public sealed partial class MainForm
         menu.Items.Clear();
         if (Selected() is not { } m) return false;
         menu.Items.Add("Open folder", null, (_, _) => Ui.Open(this, m.Folder));
-        if (ModSettingsStore.FilesOf(m.Folder).Count > 0) menu.Items.Add("Edit settings...", null, (_, _) => EditSettings(m));
+        if (HasSettings(m)) menu.Items.Add("Edit settings...", null, (_, _) => EditSettings(m));
         if (m.Enabled && !m.Locked) menu.Items.Add("Its lines in the game log", null, (_, _) => OpenLog(watch: false, m.Id));
         if (!m.Locked)
         {
@@ -680,11 +709,12 @@ public sealed partial class MainForm
     /// At start-up: when the game is a different build than the one last seen, say so once and name the enabled mods
     /// most likely to break - the ones with code first, since the game's own DLLs changed under them.
     /// </summary>
-    bool NoteGameUpdate()
+    async Task<bool> NoteGameUpdateAsync()
     {
         if (_scan == null || _analysis == null) return false;
-        var now = GameUpdate.Current(_steam, _scan.Install, _analysis);
-        var warning = GameUpdate.Check(_s.SeenGameBuild, now, _scan.Mods, _analysis);
+        var (scan, analysis) = (_scan, _analysis);
+        var now = await Task.Run(() => GameUpdate.Current(_steam, scan.Install, analysis));
+        var warning = GameUpdate.Check(_s.SeenGameBuild, now, scan.Mods, analysis);
         if (now.Known && (_s.SeenGameBuild == null || warning.Updated)) { _s.SeenGameBuild = now; SaveSettings(); }
         if (warning.Note is not { } note) return false;
         ShowNote(note, Tone.Warn);
@@ -692,12 +722,13 @@ public sealed partial class MainForm
     }
 
     /// <summary>The crash helper: the last log read down to "it looks like this mod".</summary>
-    void OpenCrashHelper()
+    async Task OpenCrashHelperAsync()
     {
         if (_scan == null) return;
+        var scan = _scan;
         UseWaitCursor = true;
         CrashReport report;
-        try { report = Crash.Check(_scan.Install, _scan.Mods); }
+        try { report = await Task.Run(() => Crash.Check(scan.Install, scan.Mods)); }
         finally { UseWaitCursor = false; }
         _s.SeenCrashLog = CrashKey(report);
         SaveSettings();
@@ -711,16 +742,18 @@ public sealed partial class MainForm
     /// At start-up: when the last session ended badly and it hasn't been mentioned yet, say so once, and say whether
     /// it did. The helper itself is a click away in Tools; nothing is opened over the player's window.
     /// </summary>
-    bool NoteLastCrash()
+    async Task<bool> NoteLastCrashAsync()
     {
         if (_scan == null) return false;
+        var scan = _scan;
         try
         {
-            var report = Crash.Check(_scan.Install, _scan.Mods);
+            // A long log takes a while to read and sort out, so it is done off the window's thread.
+            var report = await Task.Run(() => Crash.Check(scan.Install, scan.Mods));
             if (!report.Crashed || CrashKey(report) is not { } key || key == _s.SeenCrashLog) return false;
             _s.SeenCrashLog = key;
             SaveSettings();
-            var mod = report.SuspectModId is { } id ? _scan.Mods.FirstOrDefault(m => m.Id == id)?.DisplayName : null;
+            var mod = report.SuspectModId is { } id ? scan.Mods.FirstOrDefault(m => m.Id == id)?.DisplayName : null;
             ShowNote($"The game's last session ended badly{(mod != null ? $", and most of the errors point at {mod}" : "")}. Tools > What went wrong last time has the details.", Tone.Warn);
             return true;
         }
@@ -889,7 +922,7 @@ public sealed partial class MainForm
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Server sync...", null, async (_, _) => await OpenServerSync()) { Enabled = _scan != null });
         menu.Items.Add("Server panel and console...", null, (_, _) => OpenServerConsole());
-        menu.Items.Add(new ToolStripMenuItem("What went wrong last time?", null, (_, _) => OpenCrashHelper()) { Enabled = _scan != null });
+        menu.Items.Add(new ToolStripMenuItem("What went wrong last time?", null, async (_, _) => await OpenCrashHelperAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripMenuItem("Export a client pack for players...", null, async (_, _) => await ExportClientPackAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Open the game's Mods folder", null, (_, _) => { Directory.CreateDirectory(_scan!.Install.GameMods); Ui.Open(this, _scan.Install.GameMods); }) { Enabled = _scan != null });
