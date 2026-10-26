@@ -46,6 +46,8 @@ public sealed class AppSettings
     public Dictionary<string, string> Colours { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>The dedicated server whose Mods folder Server sync keeps in step.</summary>
     public ServerTarget Server { get; set; } = new();
+    /// <summary>The telnet console the server panel talks to (the server here, or a hosted one).</summary>
+    public TelnetTarget Telnet { get; set; } = new();
     /// <summary>Look for a newer version of the app at start-up.</summary>
     public bool CheckForUpdates { get; set; } = true;
     /// <summary>A version the player said not to be reminded about again.</summary>
@@ -77,6 +79,7 @@ public sealed class AppSettings
                 s.Colours = new Dictionary<string, string>(s.Colours, StringComparer.OrdinalIgnoreCase);
                 s.Sides = new Dictionary<string, ModSide>(s.Sides, StringComparer.OrdinalIgnoreCase);
                 s.Server ??= new ServerTarget();
+                s.Telnet ??= new TelnetTarget();
                 return s;
             }
         }
