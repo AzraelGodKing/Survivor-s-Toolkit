@@ -44,7 +44,7 @@ public static partial class LogAnalysis
     /// </summary>
     public static List<LogLine> Lines(IReadOnlyList<string> lines, IReadOnlyList<InstalledMod> mods)
     {
-        var clues = mods.Where(m => !m.Locked).Select(m => new Clues(m, m.HasCode ? Namespaces(m.Dlls) : Array.Empty<string>())).ToList();
+        var clues = CluesFor(mods);
         var result = new List<LogLine>(lines.Count);
         var i = 0;
         while (i < lines.Count)
@@ -77,12 +77,30 @@ public static partial class LogAnalysis
             && (f == null || l.Text.Contains(f, StringComparison.OrdinalIgnoreCase))).ToList();
     }
 
-    /// <summary>How a mod is recognised in log text.</summary>
-    sealed record Clues(InstalledMod Mod, string[] Namespaces);
+    /// <summary>How a mod is recognised in log text; the strings are built once, as every entry of a long log is checked.</summary>
+    sealed class Clues
+    {
+        public InstalledMod Mod { get; }
+        public string[] Named { get; }
+        public string[] Files { get; }
+        public string[] Code { get; }
+
+        public Clues(InstalledMod mod, string[] namespaces)
+        {
+            Mod = mod;
+            Named = new[] { mod.Key, mod.FolderName }.Distinct().Where(n => n.Length >= 3)
+                .SelectMany(n => new[] { $"'{n}'", $"\"{n}\"", $"mod {n}", $"Mod: {n} " }).ToArray();
+            Files = new[] { "Mods/" + mod.FolderName + "/", "Mods\\" + mod.FolderName + "\\" };
+            Code = namespaces.SelectMany(ns => new[] { "at " + ns + ".", "[" + ns + "]" }).ToArray();
+        }
+    }
+
+    static List<Clues> CluesFor(IReadOnlyList<InstalledMod> mods) =>
+        mods.Where(m => !m.Locked).Select(m => new Clues(m, m.HasCode ? Namespaces(m.Dlls) : Array.Empty<string>())).ToList();
 
     public static List<LogGroup> Analyze(IReadOnlyList<string> lines, IReadOnlyList<InstalledMod> mods)
     {
-        var clues = mods.Where(m => !m.Locked).Select(m => new Clues(m, m.HasCode ? Namespaces(m.Dlls) : Array.Empty<string>())).ToList();
+        var clues = CluesFor(mods);
         var groups = new Dictionary<string, (Severity Sev, string Msg, int Count, string Detail, int Line)>();
         var order = new List<string>();
 
@@ -116,16 +134,14 @@ public static partial class LogAnalysis
     {
         // XML patch errors name the mod: "XML loader: Patching 'items.xml' from mod 'SomeMod' failed"; so does "[MODS] Loaded Mod: SomeMod (1.0)".
         foreach (var c in clues)
-            foreach (var name in new[] { c.Mod.Key, c.Mod.FolderName }.Distinct().Where(n => n.Length >= 3))
-                if (text.Contains($"'{name}'", StringComparison.OrdinalIgnoreCase) || text.Contains($"\"{name}\"", StringComparison.OrdinalIgnoreCase) || text.Contains($"mod {name}", StringComparison.OrdinalIgnoreCase) || text.Contains($"Mod: {name} ", StringComparison.OrdinalIgnoreCase))
-                    return (c.Mod, "the message names it");
+            if (c.Named.Any(n => text.Contains(n, StringComparison.OrdinalIgnoreCase)))
+                return (c.Mod, "the message names it");
         foreach (var c in clues)
-            if (text.Contains("Mods/" + c.Mod.FolderName + "/", StringComparison.OrdinalIgnoreCase) || text.Contains("Mods\\" + c.Mod.FolderName + "\\", StringComparison.OrdinalIgnoreCase))
+            if (c.Files.Any(f => text.Contains(f, StringComparison.OrdinalIgnoreCase)))
                 return (c.Mod, "a file in its folder is named");
         foreach (var c in clues)
-            foreach (var ns in c.Namespaces)
-                if (text.Contains("at " + ns + ".", StringComparison.Ordinal) || text.Contains("[" + ns + "]", StringComparison.Ordinal))
-                    return (c.Mod, "its code is in the stack trace");
+            if (c.Code.Any(n => text.Contains(n, StringComparison.Ordinal)))
+                return (c.Mod, "its code is in the stack trace");
         return (null, null);
     }
 
@@ -135,13 +151,26 @@ public static partial class LogAnalysis
     internal static string[] Namespaces(IEnumerable<string> dlls)
     {
         var set = new HashSet<string>();
-        foreach (var dll in dlls)
+        foreach (var dll in dlls) set.UnionWith(NamespacesOf(dll));
+        return set.OrderByDescending(s => s.Length).ToArray();
+    }
+
+    /// <summary>One DLL's namespaces, kept until the file changes: the log window re-reads the log every few seconds.</summary>
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTime Written, string[] Namespaces)> DllCache = new(StringComparer.OrdinalIgnoreCase);
+
+    static string[] NamespacesOf(string dll)
+    {
+        DateTime written;
+        try { written = File.GetLastWriteTimeUtc(dll); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return Array.Empty<string>(); }
+        if (DllCache.TryGetValue(dll, out var hit) && hit.Written == written) return hit.Namespaces;
+        var set = new List<string>();
+        try
         {
-            try
+            using var fs = File.OpenRead(dll);
+            using var pe = new PEReader(fs);
+            if (pe.HasMetadata)
             {
-                using var fs = File.OpenRead(dll);
-                using var pe = new PEReader(fs);
-                if (!pe.HasMetadata) continue;
                 var md = pe.GetMetadataReader();
                 foreach (var h in md.TypeDefinitions)
                 {
@@ -152,9 +181,11 @@ public static partial class LogAnalysis
                     if (!CommonNamespaces.Contains(top)) set.Add(ns);
                 }
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException) { }
         }
-        return set.OrderByDescending(s => s.Length).ToArray();
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException) { return Array.Empty<string>(); }
+        var found = set.Distinct().ToArray();
+        DllCache[dll] = (written, found);
+        return found;
     }
 
     /// <summary>Reads a log the game may still be writing.</summary>

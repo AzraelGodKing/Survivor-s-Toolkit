@@ -46,7 +46,8 @@ public sealed partial class MainForm : Form
             if (updatedFrom != null) ShowNote($"Updated from {updatedFrom} to {UpdateCheck.CurrentVersion}.", Tone.Ok);
             await ScanAsync();
             // A crash is the more urgent of the two notes, so it wins the one line there is.
-            if (!NoteLastCrash()) NoteGameUpdate();
+            if (!await NoteLastCrashAsync()) await NoteGameUpdateAsync();
+            ShowWhatsNewAfterUpdate(updatedFrom);
             if (_s.CheckForUpdates) await CheckForUpdateAsync(quiet: true);
         };
         DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true || DroppedLink(e.Data) != null ? DragDropEffects.Copy : DragDropEffects.None;
@@ -57,6 +58,8 @@ public sealed partial class MainForm : Form
         };
         KeyDown += OnKey;
         FormClosing += OnClosing;
+        // A downloaded update is installed once the window is gone (and started again when it was Restart now).
+        FormClosed += (_, _) => InstallPendingUpdate(restart: _restartAfterUpdate);
     }
 
     void Tip(Control c, string text) => _tip.SetToolTip(c, text);
@@ -101,13 +104,18 @@ public sealed partial class MainForm : Form
         return bar;
     }
 
-    static Control BuildFooter()
+    Control BuildFooter()
     {
-        var bar = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, ColumnCount = 2, RowCount = 1, Padding = new Padding(16, 3, 16, 4) };
+        var bar = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, ColumnCount = 3, RowCount = 1, Padding = new Padding(16, 3, 16, 4) };
+        bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         bar.Controls.Add(new Label { Text = "Survivor's Toolkit " + Version, AutoSize = true, Font = Theme.SmallFont, Anchor = AnchorStyles.Left, Margin = Padding.Empty }.Role(ThemeRole.Muted), 0, 0);
-        bar.Controls.Add(new Label { Text = "Not affiliated with The Fun Pimps or Valve. Drop a mod's .zip, folder or download link anywhere on the window to install it.", AutoSize = true, Font = Theme.SmallFont, Anchor = AnchorStyles.Right, Margin = Padding.Empty }.Role(ThemeRole.Muted), 1, 0);
+        _updateReady.Font = Theme.SmallFont;
+        _updateReady.Anchor = AnchorStyles.Left;
+        _updateReady.LinkClicked += (_, _) => RestartToUpdate();
+        bar.Controls.Add(_updateReady, 1, 0);
+        bar.Controls.Add(new Label { Text = "Not affiliated with The Fun Pimps or Valve. Drop a mod's .zip, folder or download link anywhere on the window to install it.", AutoSize = true, Font = Theme.SmallFont, Anchor = AnchorStyles.Right, Margin = Padding.Empty }.Role(ThemeRole.Muted), 2, 0);
         var footer = new Panel { Dock = DockStyle.Bottom, AutoSize = true };
         footer.Controls.Add(bar);
         footer.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1 }.Role(ThemeRole.Divider));
@@ -126,6 +134,7 @@ public sealed partial class MainForm : Form
     void ApplyTheme()
     {
         foreach (Form f in Application.OpenForms) Theme.Apply(f);
+        _checked = (null, new(), default); // the problems list is coloured too
         FillList();
     }
 
@@ -145,8 +154,8 @@ public sealed partial class MainForm : Form
         if (_dirty && e.CloseReason == CloseReason.UserClosing)
         {
             var r = MessageBox.Show(this, "You have changes that aren't saved to the game. Save them now?", "Survivor's Toolkit", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-            if (r == DialogResult.Cancel) { e.Cancel = true; return; }
-            if (r == DialogResult.Yes && !SaveToGame()) { e.Cancel = true; return; }
+            if (r == DialogResult.Cancel) { e.Cancel = true; _restartAfterUpdate = false; return; }
+            if (r == DialogResult.Yes && !SaveToGame()) { e.Cancel = true; _restartAfterUpdate = false; return; }
         }
         _s.WindowMaximized = WindowState == FormWindowState.Maximized;
         var b = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
@@ -162,32 +171,6 @@ public sealed partial class MainForm : Form
         StartPosition = FormStartPosition.Manual;
         Bounds = r;
         if (_s.WindowMaximized) WindowState = FormWindowState.Maximized;
-    }
-
-    bool _checkingUpdate;
-
-    /// <summary>
-    /// Asks GitHub for a newer version and offers it. <paramref name="quiet"/> (at start-up) says nothing when there is
-    /// none or GitHub can't be reached, and skips a version the player said not to be reminded about.
-    /// </summary>
-    async Task CheckForUpdateAsync(bool quiet)
-    {
-        if (_checkingUpdate) return;
-        _checkingUpdate = true;
-        try
-        {
-            var r = await UpdateCheck.FindNewerAsync(UpdateCheck.CurrentVersion);
-            if (r == null)
-            {
-                if (!quiet) Info(this, $"You have the newest version ({UpdateCheck.CurrentVersion}).");
-                return;
-            }
-            if (quiet && r.Version == _s.SkippedVersion) return;
-            using var f = new UpdateForm(r);
-            f.ShowDialog(this);
-            if (f.SkipThisVersion && _s.SkippedVersion != r.Version) { _s.SkippedVersion = r.Version; SaveSettings(); }
-        }
-        finally { _checkingUpdate = false; }
     }
 
     void SaveSettings()

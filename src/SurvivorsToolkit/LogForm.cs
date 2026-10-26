@@ -112,24 +112,44 @@ sealed class LogForm : Form
         UpdateStatus();
     }
 
-    void Read(bool force)
+    bool _reading;
+
+    /// <summary>
+    /// Reads the log again when it has grown. A running game's log can be tens of thousands of lines, so reading and
+    /// sorting it out is done off the window's thread; a tick that comes while a read is still going is skipped.
+    /// </summary>
+    async void Read(bool force)
     {
-        var path = SevenDays.LatestLog(_scan.Install);
+        if (_reading) return;
+        _reading = true;
+        try { await ReadAsync(force); }
+        finally { _reading = false; }
+    }
+
+    async Task ReadAsync(bool force)
+    {
+        var install = _scan.Install;
+        var enabled = _scan.Mods.Where(m => m.Enabled).ToList();
+        var path = await Task.Run(() => SevenDays.LatestLog(install));
+        if (IsDisposed) return;
         if (path == null) { _status.Text = "Waiting for the game to write its log..."; return; }
         long size;
         try { size = new FileInfo(path).Length; } catch (IOException) { return; }
         if (!force && path == _path && size == _lastSize) return;
-        _path = path;
-        _lastSize = size;
         List<LogGroup> groups;
         try
         {
-            var lines = LogAnalysis.ReadLines(path);
-            var enabled = _scan.Mods.Where(m => m.Enabled).ToList();
-            groups = LogAnalysis.Analyze(lines, enabled);
-            _all = LogAnalysis.Lines(lines, enabled);
+            (groups, var all) = await Task.Run(() =>
+            {
+                var lines = LogAnalysis.ReadLines(path);
+                return (LogAnalysis.Analyze(lines, enabled), LogAnalysis.Lines(lines, enabled));
+            });
+            _all = all;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { _status.Text = "Couldn't read the log: " + e.Message; return; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { if (!IsDisposed) _status.Text = "Couldn't read the log: " + e.Message; return; }
+        if (IsDisposed) return;
+        _path = path;
+        _lastSize = size;
 
         var selected = _groups.SelectedItems.Count > 0 ? (_groups.SelectedItems[0].Tag as LogGroup)?.Message : null;
         _groups.BeginUpdate();

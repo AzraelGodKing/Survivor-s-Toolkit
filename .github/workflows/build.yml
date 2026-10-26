@@ -19,7 +19,7 @@ jobs:
       - name: Test
         run: dotnet test SurvivorsToolkit.sln -c Release --no-build
       - name: Publish single-file exe
-        run: dotnet publish src/SurvivorsToolkit/SurvivorsToolkit.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+        run: dotnet publish src/SurvivorsToolkit/SurvivorsToolkit.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true -o publish
       - uses: actions/upload-artifact@v4
         with:
           name: SurvivorsToolkit-win-x64

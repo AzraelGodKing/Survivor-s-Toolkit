@@ -38,7 +38,10 @@ public sealed class LibraryScan
         Mods = mods;
     }
 
-    public InstalledMod? ById(string id) => Mods.FirstOrDefault(m => m.Id == id);
+    Dictionary<string, InstalledMod>? _byId;
+
+    /// <summary>The mod with this <see cref="InstalledMod.Id"/>; asked once per row of a long log, so it is a lookup.</summary>
+    public InstalledMod? ById(string id) => (_byId ??= Mods.GroupBy(m => m.Id).ToDictionary(g => g.Key, g => g.First())).GetValueOrDefault(id);
 
     /// <summary>
     /// The enabled mods in the order the game loads them: by folder name, A to Z (which is why the game's own folder is
