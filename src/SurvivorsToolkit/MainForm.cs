@@ -45,7 +45,8 @@ public sealed partial class MainForm : Form
         {
             if (updatedFrom != null) ShowNote($"Updated from {updatedFrom} to {UpdateCheck.CurrentVersion}.", Tone.Ok);
             await ScanAsync();
-            NoteLastCrash();
+            // A crash is the more urgent of the two notes, so it wins the one line there is.
+            if (!NoteLastCrash()) NoteGameUpdate();
             if (_s.CheckForUpdates) await CheckForUpdateAsync(quiet: true);
         };
         DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true || DroppedLink(e.Data) != null ? DragDropEffects.Copy : DragDropEffects.None;
