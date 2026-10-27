@@ -1,10 +1,14 @@
 # Publishes Survivor's Toolkit as a GitHub release the app's self-update finds:
 #   tag v<Version>, with SurvivorsToolkit-<Version>-win-x64.exe and SHA256SUMS.txt.
 # The version is <Version> in Directory.Build.props; bump it, and add a "## <Version>" section to CHANGELOG.md, before
-# running this. That section is the release's notes and what the app shows once after updating to it.
+# releasing. That section is the release's notes and what the app shows once after updating to it.
+# Starts on a pushed tag like v1.2.0 ("Promote test and release" pushes one), which must match <Version>, or by hand
+# (Actions > Release > Run workflow), which tags the commit it runs on.
 name: Release
 
 on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
   workflow_dispatch:
     inputs:
       notes:
@@ -31,6 +35,9 @@ jobs:
         run: |
           $v = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
           if (-not $v) { throw "No <Version> in Directory.Build.props" }
+          if ('${{ github.ref_type }}' -eq 'tag' -and '${{ github.ref_name }}' -ne "v$v") {
+            throw "Tag ${{ github.ref_name }} does not match <Version>$v</Version> in Directory.Build.props"
+          }
           "version=$v" >> $env:GITHUB_OUTPUT
           "tag=v$v" >> $env:GITHUB_OUTPUT
       - name: Read the change notes
@@ -77,6 +84,8 @@ jobs:
           $notes = Get-Content changelog-notes.md -Raw
           if ($env:NOTES) { $notes = $env:NOTES + "`n`n" + $notes }
           Set-Content -Path release-notes.md -Value $notes -Encoding utf8
+          # A version like 1.2.0-beta.1 is a pre-release, which the app's update check skips.
+          $pre = if ('${{ steps.meta.outputs.version }}'.Contains('-')) { @('--prerelease') } else { @() }
           gh release create "${{ steps.meta.outputs.tag }}" (Get-ChildItem release/*).FullName `
             --repo "${{ github.repository }}" --target "${{ github.sha }}" `
-            --title "Survivor's Toolkit ${{ steps.meta.outputs.version }}" --notes-file release-notes.md
+            --title "Survivor's Toolkit ${{ steps.meta.outputs.version }}" --notes-file release-notes.md @pre

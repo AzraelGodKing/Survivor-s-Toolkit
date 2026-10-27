@@ -172,11 +172,20 @@ window. `Theme.cs` is ModWright's, plus the two Wasteland themes.
 
 ## Releasing
 
-Bump `<Version>` in `Directory.Build.props` on `main` and add a `## <version>` section to `CHANGELOG.md`, then run
-the **Release** workflow (Actions tab), optionally with extra notes. It refuses a version with no changelog section,
-tests, publishes `SurvivorsToolkit-<version>-win-x64.exe` (ReadyToRun, so it starts quickly) and `SHA256SUMS.txt`,
-and creates the release `v<version>` with that section as its notes, which is what the app's update check looks for.
-The same section is what the app shows once after updating to that version.
+On `test`, bump `<Version>` in `Directory.Build.props` and add a `## <version>` section to `CHANGELOG.md`. When
+`test` is ready, run **Promote test and release** (Actions tab; tick **dry_run** to only check and test). It merges
+`main` into `test` if `test` doesn't already contain it, runs the tests, fast-forwards `main` to `test`, tags it
+`v<version>` and leaves `test` at the same commit, all in one push. The tag starts the **Release** workflow, which
+refuses a version with no changelog section, tests, publishes `SurvivorsToolkit-<version>-win-x64.exe` (ReadyToRun,
+so it starts quickly) and `SHA256SUMS.txt`, and creates the release `v<version>` with that section as its notes, which
+is what the app's update check looks for. The same section is what the app shows once after updating to that version.
+A version with a `-` (such as `0.4.0-beta.1`) becomes a pre-release, which the update check skips.
+
+Promote test and release needs a `RELEASE_TOKEN` repository secret: a fine-grained personal access token for this
+repository with **Contents** and **Workflows** read and write. The built-in token can't push commits that change
+workflow files, and a tag it pushes wouldn't start the Release workflow.
+
+**Release** can also be run by hand on any branch, optionally with extra notes; it tags the commit it ran on.
 
 ## Not carried over from ModWright
 
@@ -190,4 +199,6 @@ Survivor's Toolkit started as the 7 Days Mod Manager in
 first run copies the old settings, modlists and backups from `%LocalAppData%\SevenDaysModManager` to
 `%LocalAppData%\SurvivorsToolkit`.
 
-Work goes into the long-lived `test` branch first, then `test` is merged into `main`. `test` is never deleted.
+Work goes into the long-lived `test` branch first, then **Promote test and release** brings `test` into `main`. `test`
+is never deleted: if a `test` -> `main` pull request is merged instead and GitHub deletes the branch, the **Keep test
+branch** workflow puts it back at the new `main`.
