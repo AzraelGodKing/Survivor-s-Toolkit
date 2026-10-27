@@ -3,6 +3,17 @@
 Each `## <version>` section is shown in the app once after it updates to that version (and all of them under
 **Options > About > What's new**), and the Release workflow uses it as the release's notes.
 
+## 0.4.0
+
+- **Save the server's log to files.** **Save the log to files...** in the server panel (or **Tools > Save the
+  server's log to files**) keeps the server's errors, warnings and every line in three files a day
+  (`errors-`, `warnings-` and `everything-<date>.log`), each one only when it is ticked. A new set starts at midnight
+  and days older than the ones you keep (14 unless you change it) are deleted. The log comes from the dedicated
+  server's log file on this PC, or from the telnet console for a hosted server, which connects again by itself when
+  the server restarts. It can start when the app opens, and `SurvivorsToolkit serverlog` does the same with no window.
+- **Share a day of logs.** **Zip it to share** (or the last 7 days) makes a zip of that day's files, shows it in
+  Explorer and puts it on the clipboard, ready to paste into Discord or an email.
+
 ## 0.3.0
 
 - **Tools in the header bar.** SERVER, SYNC, SAVES, LOG, CRASH and TWEAKS sit next to MODS and OPTIONS and open their

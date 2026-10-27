@@ -45,6 +45,7 @@ public sealed partial class MainForm : Form
         {
             if (updatedFrom != null) ShowNote($"Updated from {updatedFrom} to {UpdateCheck.CurrentVersion}.", Tone.Ok);
             await ScanAsync();
+            if (_s.ServerLogs.StartWithApp && ServerLogService.Start(_s, LocalServer) is { } why) ShowNote("The server's log isn't being saved: " + why, Tone.Warn);
             // A crash is the more urgent of the two notes, so it wins the one line there is.
             if (!await NoteLastCrashAsync()) await NoteGameUpdateAsync();
             ShowWhatsNewAfterUpdate(updatedFrom);
