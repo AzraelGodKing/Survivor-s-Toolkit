@@ -6,7 +6,8 @@ namespace SurvivorsToolkit;
 /// "A new version is out": its change notes, with Update now (download and check it), Release notes (the release page)
 /// and Later, and a box to stop reminding about this version. Once the download is checked it offers Restart now or
 /// When I close the app, as ModWright does; the main window installs it either way (<see cref="Prepared"/>). A copy
-/// that can't replace itself gets Download instead, which saves the new exe through the browser.
+/// installed with the Setup.exe updates through Velopack (<see cref="AppUpdates"/>). A copy that can't replace itself
+/// gets Download instead, which saves the new version through the browser.
 /// </summary>
 sealed class UpdateForm : Form
 {
@@ -20,7 +21,7 @@ sealed class UpdateForm : Form
     /// <summary>True when the box to skip this version was ticked as the window closed.</summary>
     public bool SkipThisVersion => _skip.Checked;
     /// <summary>The downloaded, checked update, or null when it wasn't downloaded.</summary>
-    public PreparedUpdate? Prepared { get; private set; }
+    public PendingUpdate? Prepared { get; private set; }
     /// <summary>True when Restart now was pressed; otherwise <see cref="Prepared"/> is installed when the app closes.</summary>
     public bool RestartNow { get; private set; }
 
@@ -35,8 +36,8 @@ sealed class UpdateForm : Form
         StartPosition = FormStartPosition.CenterParent;
         ShowInTaskbar = false;
 
-        var exe = SelfUpdate.RunningExe();
-        var cannot = SelfUpdate.CannotUpdateReason(release, exe);
+        var cannot = AppUpdates.CannotUpdateReason(release);
+        var url = AppUpdates.DownloadUrl(release);
         var head = new Label { Text = $"Version {release.Version} is out. You have {UpdateCheck.CurrentVersion}.", AutoSize = true, Font = Theme.HeadingFont, UseMnemonic = false }.Role(ThemeRole.Title);
         var notes = new TextBox
         {
@@ -45,17 +46,19 @@ sealed class UpdateForm : Form
         };
         _skip = new CheckBox { Text = $"Don't remind me about {release.Version}", AutoSize = true };
         _update = Btn("Update now", async (_, _) => await DownloadAsync()).Role(ThemeRole.Primary);
-        var download = Btn("Download", (_, _) => Ui.Open(this, release.ExeUrl!));
+        var download = Btn("Download", (_, _) => Ui.Open(this, url!));
         var page = Btn("Release notes", (_, _) => Ui.Open(this, release.PageUrl));
         _later = Btn("Later", (_, _) => { _cts?.Cancel(); Close(); });
         _restart = Btn("Restart now", (_, _) => { RestartNow = true; Close(); }).Role(ThemeRole.Primary);
         _onClose = Btn("When I close the app", (_, _) => Close());
         _restart.Visible = _onClose.Visible = false;
         _update.Visible = cannot == null;
-        download.Visible = cannot != null && release.ExeUrl != null;
+        download.Visible = cannot != null && url != null;
         _status.Text = cannot != null
-            ? cannot + (release.ExeUrl != null ? " Download saves the new exe through your browser; close this one and run the new one." : " Use Release notes to download it.")
-            : "Update now downloads it and checks it against the release's SHA-256 checksums before anything is changed.";
+            ? cannot + (url != null ? " Download saves the new version through your browser; close this one and run the new one." : " Use Release notes to download it.")
+            : AppUpdates.IsInstalled
+                ? "Update now downloads only what changed and checks it before anything is changed."
+                : "Update now downloads it and checks it against the release's SHA-256 checksums before anything is changed.";
         if (busy && cannot == null) _status.Text += " You have unsaved ticks: you'll be asked about them before it restarts.";
         Tip(_onClose, "Keep working; the new version is installed when this window closes, and starts the next time you open the app");
 
@@ -97,7 +100,7 @@ sealed class UpdateForm : Form
         try
         {
             var progress = new Progress<int>(p => { if (!IsDisposed) { _bar.Value = p; _status.Text = $"Downloading... {p}%"; } });
-            Prepared = await SelfUpdate.PrepareAsync(_release, progress, _cts.Token);
+            Prepared = await AppUpdates.DownloadAsync(_release, progress, _cts.Token);
             if (IsDisposed) return;
             _bar.Visible = false;
             _status.ForeColor = Theme.Of(Tone.Ok);

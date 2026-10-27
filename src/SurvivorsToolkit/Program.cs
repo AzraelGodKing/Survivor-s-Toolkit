@@ -7,6 +7,10 @@ static class Program
     [STAThread]
     static int Main(string[] args)
     {
+        // Lets the Setup.exe install, update and uninstall this copy: Velopack runs the app with its own arguments at
+        // those moments, and this handles them and exits. Does nothing otherwise. See AppUpdates.
+        Velopack.VelopackApp.Build().Run();
+
         // The downloaded program installing itself once the old one has closed (see SelfUpdate.HandOff).
         if (args.Length > 0 && args[0] == SelfUpdate.FinishArg)
             return SelfUpdate.Finish(args[1..], message =>
@@ -27,7 +31,7 @@ static class Program
         Theme.Set(settings.Theme);
         var u = Array.IndexOf(args, SelfUpdate.UpdatedFromArg);
         var updatedFrom = u >= 0 && u + 1 < args.Length ? args[u + 1] : null;
-        // What an earlier update left behind: the old exe, and downloads already installed.
+        // What an earlier update left behind: the old files, and downloads already installed.
         Task.Run(() =>
         {
             try

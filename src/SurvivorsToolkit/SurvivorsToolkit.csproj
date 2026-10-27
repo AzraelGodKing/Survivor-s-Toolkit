@@ -12,6 +12,8 @@
   <ItemGroup>
     <!-- Keeps the server's FTP password encrypted for the Windows user (DPAPI). -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <!-- Installs and updates the app the way most desktop apps do (a separate Update.exe swaps versions); see AppUpdates.cs. -->
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SurvivorsToolkit.Core\SurvivorsToolkit.Core.csproj" />

@@ -3,6 +3,17 @@
 Each `## <version>` section is shown in the app once after it updates to that version (and all of them under
 **Options > About > What's new**), and the Release workflow uses it as the release's notes.
 
+## 0.4.0
+
+- **Setup.exe that updates like other desktop apps.** Each release now also has `SurvivorsToolkit-<version>-Setup.exe`
+  (built with [Velopack](https://velopack.io), the same as ModWright). It installs the app for your Windows user with
+  Start menu and desktop shortcuts, no administrator rights needed, and updates it with a separate updater that swaps
+  versions after the app has closed and only downloads what changed.
+- **A small zip build.** `SurvivorsToolkit-<version>-win-x64-framework-dependent.zip` is a folder build for machines
+  with the .NET 8 Desktop Runtime, or where antivirus refuses the large single-file exe. It updates itself from the
+  next release's zip.
+- The standalone exe still updates itself as before.
+
 ## 0.3.0
 
 - **Tools in the header bar.** SERVER, SYNC, SAVES, LOG, CRASH and TWEAKS sit next to MODS and OPTIONS and open their
