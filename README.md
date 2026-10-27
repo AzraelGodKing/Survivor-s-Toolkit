@@ -76,6 +76,12 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   address, port, password and blood moon frequency in from the dedicated server's own `serverconfig.xml` when there is
   one on this PC; for a hosted server, copy them from your host's panel. The password is kept encrypted for your
   Windows account.
+- **Saved logins:** Server sync and the server panel each have a **Saved login** row. **Save login...** keeps what is
+  in the boxes under a name ("My 7d2d.net server"), and asks whether to keep the password too (encrypted for your
+  Windows account) or leave it out so you type it each time. Next time, pick the login from the list and everything is
+  filled in; in the server panel it connects straight away when the password was kept. The FTP details (Server sync)
+  and the telnet details (server panel) can be kept under the same name, since a host gives you both for one server.
+  **Forget** drops the picked login.
 - **Worlds and saves:** **Saves...** lists your worlds with the saves in each, when they were last played and what
   they take up, and the map the game built for a random gen world (`GeneratedWorlds`), which is usually the biggest
   thing in there. Rename a save, or a whole world (its map is renamed with it), back a save up to a zip, restore one

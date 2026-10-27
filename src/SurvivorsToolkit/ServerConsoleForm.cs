@@ -20,6 +20,7 @@ sealed class ServerConsoleForm : Form
     readonly NumericUpDown _bloodMoon = new() { Minimum = 0, Maximum = 365, Value = 7, Width = 70, AccessibleName = "Blood moon every" };
     readonly CheckBox _auto = new() { Text = "Refresh every 15 seconds", AutoSize = true, Checked = true };
     readonly Button _connect, _disconnect, _refresh, _fromConfig, _send;
+    readonly SavedLoginBar _logins;
 
     readonly Label _state = new() { AutoSize = true, UseMnemonic = false, Font = Theme.SectionFont };
     readonly Label _players = Muted();
@@ -56,10 +57,12 @@ sealed class ServerConsoleForm : Form
         _send = SmallBtn("Send", async (_, _) => await SendTypedAsync()).Role(ThemeRole.Accent);
 
         var restarts = SmallBtn("Scheduled restarts...", (_, _) => { Keep(); new RestartsForm(_s, _saveSettings, _startServer).Show(this); });
+        _logins = new SavedLoginBar(this, _s, _saveSettings, telnet: true, () => _host.Text, () => _password.Text.Length > 0, SaveLogin, UseLogin);
         var setup = Card("Console", new Control[] { restarts, _connect, _disconnect },
+            _logins.Row,
             Row(Lbl("Address"), _host, Lbl("Port"), _port, Lbl("Password"), _password, _fromConfig),
             Row(Lbl("Blood moon every"), _bloodMoon, Muted("days (BloodMoonFrequency); 0 turns the countdown off"), _auto),
-            Row(Muted("The server needs TelnetEnabled true, a TelnetPassword and its TelnetPort reachable. The password is kept encrypted for your Windows account. A host's panel usually lists the telnet port under its console or RCON settings.")));
+            Row(Muted("The server needs TelnetEnabled true, a TelnetPassword and its TelnetPort reachable. The password is kept encrypted for your Windows account. Save login keeps this server under a name (with or without its password) so picking it fills everything in. A host's panel usually lists the telnet port under its console or RCON settings.")));
 
         foreach (var (name, w) in new[] { ("Player", 220), ("Health", 70), ("Deaths", 70), ("Zombies", 80), ("Level", 70), ("Ping", 70) })
             _list.Columns.Add(name, (int)(w * Theme.TextScale));
@@ -121,6 +124,27 @@ sealed class ServerConsoleForm : Form
         t.ProtectedPassword = Secrets.Protect(_password.Text);
         t.BloodMoonFrequency = (int)_bloodMoon.Value;
         _saveSettings();
+    }
+
+    /// <summary>Keeps the console details in the boxes under a name, for <see cref="SavedLoginBar"/>.</summary>
+    SavedLogin? SaveLogin(string name, bool keepPassword)
+    {
+        Keep();
+        if (!_s.Telnet.IsSet) { Error(this, "Fill in the server's address and telnet port first."); return null; }
+        return SavedLogins.SaveTelnet(_s.Logins, name, _s.Telnet, keepPassword, DateTime.Now);
+    }
+
+    /// <summary>
+    /// Fills the boxes from a saved login and, when its password was kept, connects straight away: one click from
+    /// picking the server to seeing it. Without a password the box is left for the player to fill in.
+    /// </summary>
+    async void UseLogin(SavedLogin login)
+    {
+        if (_busy || !SavedLogins.UseTelnet(login, _s.Telnet, DateTime.Now)) return;
+        Close_(said: $"Using the saved login {login.Name}.");
+        Fill();
+        if (_password.Text.Length == 0) { Offline($"Using the saved login {login.Name}. Type its telnet password, then press Connect."); _password.Focus(); return; }
+        await ConnectAsync();
     }
 
     /// <summary>Fills the boxes from the dedicated server's own serverconfig.xml, when there is one on this PC.</summary>
@@ -332,7 +356,7 @@ sealed class ServerConsoleForm : Form
         _busy = busy;
         _connect.Enabled = !busy;
         _disconnect.Enabled = _refresh.Enabled = _send.Enabled = !busy && _console != null;
-        _fromConfig.Enabled = !busy;
+        _fromConfig.Enabled = _logins.Enabled = !busy;
         UseWaitCursor = busy;
     }
 }

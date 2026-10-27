@@ -48,6 +48,8 @@ public sealed class AppSettings
     public ServerTarget Server { get; set; } = new();
     /// <summary>The telnet console the server panel talks to (the server here, or a hosted one).</summary>
     public TelnetTarget Telnet { get; set; } = new();
+    /// <summary>Server logins the player chose to keep by name, for one-click reuse in Server sync and the server panel.</summary>
+    public List<SavedLogin> Logins { get; set; } = new();
     /// <summary>The scheduled restart: when, what the warnings say, and whether the server here is started again.</summary>
     public RestartPlan Restarts { get; set; } = new();
     /// <summary>Look for a newer version of the app at start-up.</summary>
@@ -93,6 +95,7 @@ public sealed class AppSettings
                 s.Sides = new Dictionary<string, ModSide>(s.Sides, StringComparer.OrdinalIgnoreCase);
                 s.Server ??= new ServerTarget();
                 s.Telnet ??= new TelnetTarget();
+                s.Logins ??= new List<SavedLogin>();
                 s.Restarts ??= new RestartPlan();
                 return s;
             }
