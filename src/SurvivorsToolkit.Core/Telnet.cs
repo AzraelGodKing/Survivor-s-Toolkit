@@ -71,7 +71,7 @@ public sealed class TelnetConsole : IServerConsole
         {
             using var connect = CancellationTokenSource.CreateLinkedTokenSource(ct);
             connect.CancelAfter(Timeout);
-            await client.ConnectAsync(host.Trim(), port, connect.Token);
+            await client.ConnectAsync(host.Trim(), port, connect.Token).ConfigureAwait(false);
         }
         catch (Exception e) when (e is SocketException or OperationCanceledException && !ct.IsCancellationRequested)
         {
@@ -81,11 +81,11 @@ public sealed class TelnetConsole : IServerConsole
         var console = new TelnetConsole(client);
         try
         {
-            var hello = await console.ReadAsync(ct);
+            var hello = await console.ReadAsync(ct).ConfigureAwait(false);
             if (hello.Contains("password", StringComparison.OrdinalIgnoreCase))
             {
                 if (password.Length == 0) throw new ServerConsoleException("The console asked for a password. Fill in the TelnetPassword from the server's config.");
-                hello += await console.WriteReadAsync(password, ct);
+                hello += await console.WriteReadAsync(password, ct).ConfigureAwait(false);
                 if (hello.Contains("Password incorrect", StringComparison.OrdinalIgnoreCase)
                     || hello.Contains("password", StringComparison.OrdinalIgnoreCase) && !hello.Contains("Logon successful", StringComparison.OrdinalIgnoreCase))
                     throw new ServerConsoleException("The console didn't take that password.");
@@ -101,21 +101,21 @@ public sealed class TelnetConsole : IServerConsole
     }
 
     public async Task<string> SendAsync(string command, CancellationToken ct) =>
-        Clean(await WriteReadAsync(command, ct));
+        Clean(await WriteReadAsync(command, ct).ConfigureAwait(false));
 
     async Task<string> WriteReadAsync(string line, CancellationToken ct)
     {
         try
         {
             var bytes = Encoding.UTF8.GetBytes(line + "\r\n");
-            await _stream.WriteAsync(bytes, ct);
-            await _stream.FlushAsync(ct);
+            await _stream.WriteAsync(bytes, ct).ConfigureAwait(false);
+            await _stream.FlushAsync(ct).ConfigureAwait(false);
         }
         catch (Exception e) when (e is IOException or ObjectDisposedException or SocketException)
         {
             throw new ServerConsoleException("The console link is gone. Connect again.", e);
         }
-        return await ReadAsync(ct);
+        return await ReadAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>Reads until the console has said nothing for <see cref="Quiet"/>, or nothing at all within <see cref="Timeout"/>.</summary>
@@ -129,7 +129,7 @@ public sealed class TelnetConsole : IServerConsole
             {
                 using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 wait.CancelAfter(bytes.Count == 0 ? Timeout : Quiet);
-                read = await _stream.ReadAsync(_buffer, wait.Token);
+                read = await _stream.ReadAsync(_buffer, wait.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {

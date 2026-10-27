@@ -191,7 +191,7 @@ public sealed partial class MainForm : Form
         if (!_modsPage.Visible) return;
         if (e.KeyCode == Keys.F5) { _ = ScanAsync(); e.Handled = true; }
         else if (e.Control && e.KeyCode == Keys.F) { _filter.Focus(); e.Handled = e.SuppressKeyPress = true; }
-        else if (e.Control && e.KeyCode == Keys.S) { _ = SaveToGameAsync(); e.Handled = e.SuppressKeyPress = true; }
+        else if (e.Control && e.KeyCode == Keys.S) { _ = SaveAndRescanAsync(); e.Handled = e.SuppressKeyPress = true; }
         else if (e.Control && e.KeyCode == Keys.Z && !(ActiveControl is TextBoxBase)) { UndoRedo(undo: true); e.Handled = e.SuppressKeyPress = true; }
         else if (e.Control && e.KeyCode == Keys.Y && !(ActiveControl is TextBoxBase)) { UndoRedo(undo: false); e.Handled = e.SuppressKeyPress = true; }
         else if (e.Control && e.KeyCode == Keys.O) { PickArchive(); e.Handled = e.SuppressKeyPress = true; }

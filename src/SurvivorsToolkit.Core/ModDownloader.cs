@@ -74,7 +74,7 @@ public static partial class ModDownloader
         if (ParseGitHub(url) is not { } gh) return url.Trim();
         var api = $"https://api.github.com/repos/{gh.Owner}/{gh.Repo}/releases/" + (gh.Tag == null ? "latest" : "tags/" + Uri.EscapeDataString(gh.Tag));
         string json;
-        try { json = await http.GetStringAsync(api, ct); }
+        try { json = await http.GetStringAsync(api, ct).ConfigureAwait(false); }
         catch (HttpRequestException e) when (e.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
             throw new InvalidDataException($"{gh.Owner}/{gh.Repo} has no {(gh.Tag == null ? "published release" : "release " + gh.Tag)} on GitHub.");
@@ -92,7 +92,7 @@ public static partial class ModDownloader
     public static async Task<string> DownloadAsync(string url, HttpClient http, IProgress<(long Done, long? Total)>? progress = null, CancellationToken ct = default)
     {
         if (!IsLink(url)) throw new InvalidDataException($"{url} is not an http or https link.");
-        using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
         var total = resp.Content.Headers.ContentLength;
         if (total > MaxBytes) throw new InvalidDataException($"The download is {Display.Size(total.Value)}; that is too big for a mod.");
@@ -104,17 +104,17 @@ public static partial class ModDownloader
         var folder = Path.Combine(Path.GetTempPath(), "7dmm-download-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(folder);
         var path = Path.Combine(folder, name);
-        await using (var src = await resp.Content.ReadAsStreamAsync(ct))
+        await using (var src = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false))
         await using (var dst = File.Create(path))
         {
             var buf = new byte[81920];
             long done = 0;
             int n;
-            while ((n = await src.ReadAsync(buf, ct)) > 0)
+            while ((n = await src.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
             {
                 done += n;
                 if (done > MaxBytes) throw new InvalidDataException("The download is too big for a mod.");
-                await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                await dst.WriteAsync(buf.AsMemory(0, n), ct).ConfigureAwait(false);
                 progress?.Report((done, total));
             }
         }
@@ -183,7 +183,7 @@ public static class ModUpdates
         foreach (var repo in list.GroupBy(m => RepoOf(m.Info!.Website)!.Value, m => m))
         {
             string json;
-            try { json = await getJson($"https://api.github.com/repos/{repo.Key.Owner}/{repo.Key.Repo}/releases?per_page=100", ct); }
+            try { json = await getJson($"https://api.github.com/repos/{repo.Key.Owner}/{repo.Key.Repo}/releases?per_page=100", ct).ConfigureAwait(false); }
             catch (HttpRequestException) { continue; }
             var single = repo.Select(m => m.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1;
             foreach (var m in repo)

@@ -44,7 +44,7 @@ public static class UpdateCheck
     {
         try
         {
-            var latest = Newest(await Http.GetStringAsync(ReleasesUrl, ct));
+            var latest = Newest(await Http.GetStringAsync(ReleasesUrl, ct).ConfigureAwait(false));
             return latest != null && IsNewer(latest.Version, current) ? latest : null;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

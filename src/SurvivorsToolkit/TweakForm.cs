@@ -28,6 +28,9 @@ sealed class TweakForm : Form
 
     List<TweakThing> _all = new();
     string _root = "";
+    readonly System.Windows.Forms.Timer _findTimer = new() { Interval = 250 };
+    /// <summary>Which file read is the latest, so a slow read that finishes after another file was picked is dropped.</summary>
+    int _load;
     readonly List<Tweak> _list = new();
 
     public TweakForm(GameInstall install, Func<Task> rescan)
@@ -44,8 +47,11 @@ sealed class TweakForm : Form
         _remove = SmallBtn("Remove", (_, _) => Remove());
         _build = SmallBtn("Make the mod", async (_, _) => await BuildAsync()).Role(ThemeRole.Primary);
 
-        _file.SelectedIndexChanged += (_, _) => LoadFile();
-        _findThing.TextChanged += (_, _) => FillThings();
+        _file.SelectedIndexChanged += async (_, _) => await LoadFileAsync();
+        // Waits for typing to stop: a file can have thousands of things to list again.
+        _findTimer.Tick += (_, _) => { _findTimer.Stop(); FillThings(); };
+        _findThing.TextChanged += (_, _) => { _findTimer.Stop(); _findTimer.Start(); };
+        FormClosed += (_, _) => _findTimer.Dispose();
         _things.SelectedIndexChanged += (_, _) => FillProperties();
         _properties.SelectedIndexChanged += (_, _) => ShowWas();
         _everyThing.CheckedChanged += (_, _) => ShowWas();
@@ -103,24 +109,33 @@ sealed class TweakForm : Form
         _file.SelectedIndex = first >= 0 ? first : 0;
     }
 
-    void LoadFile()
+    /// <summary>Reads the picked config file; blocks.xml and items.xml are megabytes, so it is read off the window's thread.</summary>
+    async Task LoadFileAsync()
     {
         if (_file.SelectedItem is not string file) return;
+        var load = ++_load;
+        var path = Path.Combine(_install.ConfigFolder, file);
         try
         {
             UseWaitCursor = true;
-            var text = File.ReadAllText(Path.Combine(_install.ConfigFolder, file));
-            _root = Tweaks.Root(text);
-            _all = Tweaks.Things(text);
+            _status.Text = $"Reading {file}...";
+            var (root, all) = await Task.Run(() =>
+            {
+                var text = File.ReadAllText(path);
+                return (Tweaks.Root(text), Tweaks.Things(text));
+            });
+            if (load != _load || IsDisposed) return;
+            (_root, _all) = (root, all);
             _status.Text = $"{_all.Count} named thing{(_all.Count == 1 ? "" : "s")} in {file} (root <{_root}>)";
         }
         catch (Exception e) when (e is FormatException or IOException or UnauthorizedAccessException)
         {
+            if (load != _load || IsDisposed) return;
             _all = new List<TweakThing>();
             _root = "";
             _status.Text = e.Message;
         }
-        finally { UseWaitCursor = false; }
+        finally { if (load == _load && !IsDisposed) UseWaitCursor = false; }
         FillThings();
     }
 

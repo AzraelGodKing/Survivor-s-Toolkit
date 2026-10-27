@@ -118,6 +118,23 @@ static class Ui
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or FileNotFoundException) { Error(owner, $"Couldn't open {target}: {e.Message}"); }
     }
 
+    /// <summary>
+    /// Runs slow file work on a thread of its own that can show the shell's dialogs (the Recycle Bin's, say), so the
+    /// window keeps responding meanwhile. The task fails with whatever the work threw.
+    /// </summary>
+    public static Task RunSta(Action work)
+    {
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try { work(); done.SetResult(); }
+            catch (Exception e) { done.SetException(e); }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return done.Task;
+    }
+
     /// <summary>The named colour tags for mod rows, as Options and the right-click menu offer them.</summary>
     public static readonly (string Name, Color Color)[] Tags =
     {
