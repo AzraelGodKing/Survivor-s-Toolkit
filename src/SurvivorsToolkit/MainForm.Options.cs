@@ -157,17 +157,17 @@ public sealed partial class MainForm
     }
 
     /// <summary>A line about the server's config: its name, port, world and EAC, or why it can't be read.</summary>
-    string ServerSummary(ServerInstall? server)
+    static string ServerSummary(ServerInstall? server, string configFile, bool codeMods)
     {
         if (server == null) return "";
-        var path = server.ConfigPath(_s.ServerConfigFile);
+        var path = server.ConfigPath(configFile);
         if (!File.Exists(path)) return $"{Path.GetFileName(path)} is not in the server folder.";
         try
         {
             var p = DedicatedServer.ReadConfig(path).GroupBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.Last().Value, StringComparer.OrdinalIgnoreCase);
             string V(string k) => p.TryGetValue(k, out var v) ? v : "?";
             var eac = V("EACEnabled");
-            var code = _scan?.Mods.Any(m => m.Enabled && m.HasCode && !m.Locked) == true;
+            var code = codeMods;
             return $"\"{V("ServerName")}\", port {V("ServerPort")}, world {V("GameWorld")}, game {V("GameName")}, EAC {eac}"
                 + (code && eac.Equals("true", StringComparison.OrdinalIgnoreCase) ? ".  Code mods need EACEnabled false on the server." : "");
         }
@@ -191,28 +191,46 @@ public sealed partial class MainForm
         catch (Exception e) when (e is FormatException or IOException or UnauthorizedAccessException) { Error(this, "Couldn't restore it: " + e.Message); }
     }
 
-    void FillOptions()
+    /// <summary>Which fill of the Options page is the latest, so an older one that finishes late doesn't overwrite it.</summary>
+    int _optionsFill;
+
+    void FillOptions() => _ = FillOptionsAsync();
+
+    /// <summary>
+    /// Fills the Options page. Finding the game and the dedicated server reads Steam's library folders, which can be
+    /// on a disk that has to spin up first, so that part is done off the window's thread and filled in when it's back.
+    /// </summary>
+    async Task FillOptionsAsync()
     {
+        var fill = ++_optionsFill;
         _fillingOptions = true;
         try
         {
             _theme.SelectedIndex = Math.Max(0, Array.FindIndex(Display.Themes, t => t.Name == Display.NormalizeTheme(_s.Theme)));
             _textSize.SelectedIndex = Math.Max(0, Array.FindIndex(Display.TextSizes, t => Math.Abs(t - _s.TextScale) < 0.01f));
-            var install = _scan?.Install ?? SevenDays.Detect(_steam, _s.GameFolder, _s.UserDataFolder);
-            _gameFolderText.Text = (install?.GameFolder ?? "not found") + (_s.GameFolder == null ? "  (found through Steam)" : "");
-            _dataFolderText.Text = (install?.UserDataFolder ?? _s.UserDataFolder ?? SevenDays.DefaultUserDataFolder()) + (_s.UserDataFolder == null ? "  (default)" : "");
             _installTo.SelectedIndex = _s.InstallToUserData ? 1 : 0;
             _eac.SelectedIndex = Math.Max(0, Array.FindIndex(EacChoices, c => c.Mode == _s.Eac));
             _launchOptions.Text = _s.LaunchOptions;
             _backupSave.Checked = _s.BackupSaveBeforePlay;
             _backupSaveOnChange.Checked = _s.BackupSaveBeforeModChange;
-            var server = DedicatedServer.Find(_steam, _s.ServerFolder, install);
-            _serverFolderText.Text = (server?.Folder ?? "not found") + (_s.ServerFolder == null && server != null ? "  (found by itself)" : "");
             _serverConfig.Text = _s.ServerConfigFile;
             _serverOptions.Text = _s.ServerLaunchOptions;
             _backupConfig.Checked = _s.BackupConfigBeforeServer;
-            _serverInfo.Text = ServerSummary(server);
         }
         finally { _fillingOptions = false; }
+
+        var (scan, gameFolder, dataFolder, serverFolder, configFile) = (_scan, _s.GameFolder, _s.UserDataFolder, _s.ServerFolder, _s.ServerConfigFile);
+        var codeMods = scan?.Mods.Any(m => m.Enabled && m.HasCode && !m.Locked) == true;
+        var (install, server, summary) = await Task.Run(() =>
+        {
+            var install = scan?.Install ?? SevenDays.Detect(_steam, gameFolder, dataFolder);
+            var server = DedicatedServer.Find(_steam, serverFolder, install);
+            return (install, server, ServerSummary(server, configFile, codeMods));
+        });
+        if (fill != _optionsFill || IsDisposed) return;
+        _gameFolderText.Text = (install?.GameFolder ?? "not found") + (gameFolder == null ? "  (found through Steam)" : "");
+        _dataFolderText.Text = (install?.UserDataFolder ?? dataFolder ?? SevenDays.DefaultUserDataFolder()) + (dataFolder == null ? "  (default)" : "");
+        _serverFolderText.Text = (server?.Folder ?? "not found") + (serverFolder == null && server != null ? "  (found by itself)" : "");
+        _serverInfo.Text = summary;
     }
 }

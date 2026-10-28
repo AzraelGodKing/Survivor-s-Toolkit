@@ -129,7 +129,7 @@ public static class SelfUpdate
         if (r.ChecksumsUrl == null) throw new InvalidOperationException("The release has no SHA256SUMS.txt to check the download against.");
         http ??= UpdateCheck.CreateClient(TimeSpan.FromMinutes(10));
 
-        var sums = ParseChecksums(await http.GetStringAsync(r.ChecksumsUrl, ct));
+        var sums = ParseChecksums(await http.GetStringAsync(r.ChecksumsUrl, ct).ConfigureAwait(false));
         var name = FileNameOf(url);
         if (!sums.TryGetValue(name, out var expected)) throw new InvalidDataException($"SHA256SUMS.txt doesn't list {name}.");
 
@@ -137,7 +137,7 @@ public static class SelfUpdate
         if (Directory.Exists(staging)) Directory.Delete(staging, true);
         Directory.CreateDirectory(staging);
         var download = Path.Combine(staging, name + ".part");
-        await DownloadAsync(http, url, download, progress, ct);
+        await DownloadAsync(http, url, download, progress, ct).ConfigureAwait(false);
 
         var actual = Sha256Of(download);
         if (actual != expected)
@@ -171,18 +171,18 @@ public static class SelfUpdate
 
     static async Task DownloadAsync(HttpClient http, string url, string dest, IProgress<int>? progress, CancellationToken ct)
     {
-        using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+        using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
         var total = resp.Content.Headers.ContentLength;
         if (total > MaxDownloadBytes) throw new InvalidDataException($"The download is {total} bytes, far more than expected.");
-        await using var src = await resp.Content.ReadAsStreamAsync(ct);
+        await using var src = await resp.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         await using var dst = File.Create(dest);
         var buf = new byte[81920];
         long done = 0;
         int read, last = -1;
-        while ((read = await src.ReadAsync(buf, ct)) > 0)
+        while ((read = await src.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
         {
-            await dst.WriteAsync(buf.AsMemory(0, read), ct);
+            await dst.WriteAsync(buf.AsMemory(0, read), ct).ConfigureAwait(false);
             done += read;
             if (done > MaxDownloadBytes) throw new InvalidDataException("The download is far larger than expected.");
             if (total > 0)
