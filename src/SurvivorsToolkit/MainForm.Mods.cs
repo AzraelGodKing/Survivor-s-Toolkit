@@ -36,6 +36,8 @@ public sealed partial class MainForm
     bool _dirty, _filling, _busy, _refillQueued;
     /// <summary>What <see cref="_found"/> was worked out for, so refilling the list doesn't redo the checks.</summary>
     (LibraryScan? Scan, HashSet<string> Enabled, EacMode Eac) _checked = (null, new(), default);
+    /// <summary>The problems of the mods as they are on disk, worked out with the scan, so the list shows without a wait.</summary>
+    (LibraryScan Scan, HashSet<string> Enabled, EacMode Eac, List<ModProblem> Found)? _scanProblems;
     /// <summary>Waits for typing in the filter to stop before the list is refilled.</summary>
     readonly System.Windows.Forms.Timer _filterTimer = new() { Interval = 200 };
     Bisect? _bisect;
@@ -57,7 +59,7 @@ public sealed partial class MainForm
         tools = SmallBtn("Tools ▾", (_, _) => DropDown(tools, ToolsMenu()));
         _play = Btn("Play", async (_, _) => await PlayAsync(watch: false)).Role(ThemeRole.Accent);
         Button playMore = null!;
-        playMore = Btn("▾", (_, _) => DropDown(playMore, PlayMenu()));
+        playMore = Btn("▾", async (_, _) => DropDown(playMore, await PlayMenuAsync()));
         playMore.AccessibleName = "More ways to play";
         var test = Btn("Test", async (_, _) => await PlayAsync(watch: true));
         var readLog = Btn("Read the log", (_, _) => OpenLog(watch: false));
@@ -96,7 +98,9 @@ public sealed partial class MainForm
         _list.ItemCheck += (_, e) =>
         {
             if (_filling) return;
-            if (_list.Items[e.Index].Tag is InstalledMod { Locked: true }) e.NewValue = CheckState.Checked;
+            // While the folders are being moved or read, a tick would be lost when the list is filled again.
+            if (_busy) e.NewValue = e.CurrentValue;
+            else if (_list.Items[e.Index].Tag is InstalledMod { Locked: true }) e.NewValue = CheckState.Checked;
         };
         _list.ItemChecked += (_, e) => Ticked(e.Item);
         _list.SelectedIndexChanged += (_, _) => ShowDetails();
@@ -111,7 +115,7 @@ public sealed partial class MainForm
         Ui.DoubleBuffer(_problems);
         var install = SmallBtn("Install...", (_, _) => PickArchive());
         _undo = SmallBtn("Undo changes", (_, _) => { if (_scan == null) return; _history.Push(_enabled); SetEnabled(EnabledOnDisk()); });
-        _save = SmallBtn("Save to game", async (_, _) => await SaveToGameAsync()).Role(ThemeRole.Primary);
+        _save = SmallBtn("Save to game", async (_, _) => await SaveAndRescanAsync()).Role(ThemeRole.Primary);
         Tip(install, "Install a mod from a .zip or a folder (Ctrl+O). You can also drop it, or a download link, onto the window");
         Tip(_undo, "Go back to the mods as they are in the game folders (Ctrl+Z steps back one change at a time)");
         Tip(_save, "Move the folders: ticked mods into Mods, the others into Mods-disabled (Ctrl+S)");
@@ -178,21 +182,24 @@ public sealed partial class MainForm
                 FillList();
                 return;
             }
-            var chosen = new Dictionary<string, ModSide>(_s.Sides, _s.Sides.Comparer);
-            // Everything that reads the mods' files is done here, off the window's thread, once per scan.
-            var (scan, analysis, sides, settings) = await Task.Run(() =>
+            var eac = _s.Eac;
+            // Everything that reads the mods' files is done here, off the window's thread, once per scan: the side
+            // guesses, and the problems of the mods as they are on disk (the XML checks can take a while).
+            var (scan, analysis, sides, settings, problems) = await Task.Run(() =>
             {
                 var scan = ModLibrary.Scan(install);
                 var analysis = ModAnalysis.For(install);
                 foreach (var m in scan.Mods) analysis.XmlOf(m);
-                var sides = scan.Mods.Where(m => !m.Locked).ToDictionary(m => m.Id, m => ModSides.Of(m, chosen.TryGetValue(m.Key, out var c) ? c : null));
+                var sides = scan.Mods.Where(m => !m.Locked).ToDictionary(m => m.Id, m => ModSides.Of(m, null));
                 var settings = scan.Mods.Where(m => ModSettingsStore.FilesOf(m.Folder).Count > 0).Select(m => m.Id).ToHashSet();
-                return (scan, analysis, sides, settings);
+                var onDisk = scan.Mods.Where(m => m.Enabled).Select(m => m.Id).ToHashSet();
+                return (scan, analysis, sides, settings, (scan, onDisk, eac, Problems.Check(scan, onDisk, eac, analysis)));
             });
             (_scan, _analysis) = (scan, analysis);
-            _sides.Clear();
-            foreach (var (id, side) in sides) _sides[id] = side;
+            _detected.Clear();
+            foreach (var (id, side) in sides) _detected[id] = side;
             _hasSettings = settings;
+            _scanProblems = problems;
             _gameText.Text = $"{install.GameFolder}    ·    data: {install.UserDataFolder}{(_analysis?.Game is { } v ? "    ·    game " + v : "")}";
             _gameText.ForeColor = Theme.Of(Tone.Normal);
             _history.Clear();
@@ -322,7 +329,9 @@ public sealed partial class MainForm
         if (_checked.Scan == _scan && _checked.Eac == _s.Eac && _checked.Enabled.SetEquals(_enabled)) { ShowDetails(); return; }
         _checked = (_scan, new HashSet<string>(_enabled), _s.Eac);
         var before = _found;
-        _found = Problems.Check(_scan, _enabled, _s.Eac, _analysis);
+        _found = _scanProblems is { } sp && sp.Scan == _scan && sp.Eac == _s.Eac && sp.Enabled.SetEquals(_enabled)
+            ? sp.Found
+            : Problems.Check(_scan, _enabled, _s.Eac, _analysis);
         _problems.BeginUpdate();
         _problems.Items.Clear();
         foreach (var p in _found)
@@ -376,13 +385,16 @@ public sealed partial class MainForm
 
     string Note(InstalledMod m) => _s.Notes.GetValueOrDefault(m.Key) ?? "";
 
-    /// <summary>Each mod's side, worked out once per scan (a guess reads the mod's files).</summary>
-    readonly Dictionary<string, SideInfo> _sides = new();
+    /// <summary>Each mod's side as guessed from its files, worked out once per scan (the guess reads the mod's files).</summary>
+    readonly Dictionary<string, SideInfo> _detected = new();
 
-    SideInfo Side(InstalledMod m)
+    /// <summary>The side the player set for a mod, else the guess.</summary>
+    SideInfo Side(InstalledMod m) =>
+        _s.Sides.TryGetValue(m.Key, out var chosen) ? ModSides.Of(m, chosen) : Detected(m);
+
+    SideInfo Detected(InstalledMod m)
     {
-        if (!_sides.TryGetValue(m.Id, out var side))
-            _sides[m.Id] = side = ModSides.Of(m, _s.Sides.TryGetValue(m.Key, out var chosen) ? chosen : null);
+        if (!_detected.TryGetValue(m.Id, out var side)) _detected[m.Id] = side = ModSides.Of(m, null);
         return side;
     }
 
@@ -401,7 +413,6 @@ public sealed partial class MainForm
         if (side is { } s) _s.Sides[m.Key] = s; else _s.Sides.Remove(m.Key);
         SaveSettings();
         // The choice is by Name, so a copy of the mod in the other Mods folder follows it.
-        foreach (var o in _scan?.Mods.Where(o => string.Equals(o.Key, m.Key, StringComparison.OrdinalIgnoreCase)) ?? new[] { m }) _sides.Remove(o.Id);
         FillList();
     }
 
@@ -423,7 +434,7 @@ public sealed partial class MainForm
         if (!m.Locked)
         {
             var side = new ToolStripMenuItem("Side");
-            var found = ModSides.Of(m, null);
+            var found = Detected(m);
             var chosen = _s.Sides.TryGetValue(m.Key, out var c) ? c : (ModSide?)null;
             side.DropDownItems.Add(new ToolStripMenuItem($"As detected: {found.Label}", null, (_, _) => SetSide(m, null)) { Checked = chosen == null });
             side.DropDownItems.Add(new ToolStripSeparator());
@@ -455,14 +466,54 @@ public sealed partial class MainForm
         return false;
     }
 
-    async Task SaveToGameAsync()
+    async Task SaveAndRescanAsync()
     {
         if (!_dirty) return;
-        SaveToGame();
+        await SaveToGameAsync();
         await ScanAsync();
     }
 
-    /// <summary>Moves the folders to match the ticks. False when nothing could be saved.</summary>
+    /// <summary>
+    /// Moves the folders to match the ticks, off the window's thread: backing up a save and moving big mods can take a
+    /// while, and the window keeps responding meanwhile. False when nothing could be saved.
+    /// </summary>
+    async Task<bool> SaveToGameAsync()
+    {
+        if (_scan == null || !CanChangeFiles()) return false;
+        var (scan, enabled, backup) = (_scan, new HashSet<string>(_enabled), _s.BackupSaveBeforeModChange && _bisect == null);
+        var wasBusy = _busy;
+        _busy = true;
+        UseWaitCursor = true;
+        try
+        {
+            var backupError = await Task.Run(() =>
+            {
+                string? error = null;
+                if (backup && ModLibrary.Changes(scan, enabled).Count > 0)
+                {
+                    try { Saves.BackupNewest(scan.Install, AppSettings.SaveBackupFolder); }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException) { error = e.Message; }
+                }
+                ModLibrary.Apply(scan, enabled);
+                return error;
+            });
+            if (backupError != null) Error(this, "Couldn't back up the newest save: " + backupError + "\n\nThe mods were changed anyway.");
+            _dirty = false;
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Error(this, "Not every mod could be moved: " + e.Message + "\n\nThe list is read again to show where each mod is now.");
+            return false;
+        }
+        finally
+        {
+            _busy = wasBusy;
+            UseWaitCursor = false;
+        }
+    }
+
+    /// <summary>Moves the folders to match the ticks while the window waits, for when it is closing. False when nothing could be saved.</summary>
     bool SaveToGame()
     {
         if (_scan == null || !CanChangeFiles()) return false;
@@ -490,19 +541,21 @@ public sealed partial class MainForm
     {
         if (_scan == null) { Error(this, "Find the game first (Game folder...)."); return; }
         if (!CanChangeFiles()) return;
-        if (_dirty && !SaveToGame()) return;
+        if (_dirty && !await SaveToGameAsync()) return;
+        if (_scan == null) return;
         var lines = new List<string>();
         var target = _s.InstallToUserData ? _scan.Install.UserMods : _scan.Install.GameMods;
-        if (_s.BackupSaveBeforeModChange && BackUpSave() is { } saved) lines.Add("Newest save backed up to " + saved);
+        if (_s.BackupSaveBeforeModChange && await BackUpSaveAsync() is { } saved) lines.Add("Newest save backed up to " + saved);
+        var store = SettingsStore;
         foreach (var p in paths)
         {
             try
             {
                 var scan = _scan;
-                var done = await Task.Run(() => ModInstaller.Install(p, scan, target, AppSettings.BackupFolder));
-                foreach (var d in done)
+                if (scan == null) break;
+                var done = await Task.Run(() => ModInstaller.Install(p, scan, target, AppSettings.BackupFolder).Select(d => (d, Kept: store.Restore(d.Key, d.Folder))).ToList());
+                foreach (var (d, kept) in done)
                 {
-                    var kept = SettingsStore.Restore(d.Key, d.Folder);
                     lines.Add((d.Replaced != null ? "Updated " : "Installed ") + d.Name + (d.Replaced != null ? " (the old copy is zipped in the mod backups)" : "")
                         + (kept.Count > 0 ? $"; your settings put back in {string.Join(", ", kept)}" : ""));
                 }
@@ -538,8 +591,14 @@ public sealed partial class MainForm
         try
         {
             ShowNote("Downloading " + link + " ...", Tone.Info);
+            // A few times a second is plenty: each new note lays the page out again.
+            var shownAt = 0L;
             var progress = new Progress<(long Done, long? Total)>(p =>
-                ShowNote($"Downloading {link}  {Display.Size(p.Done)}{(p.Total is { } t ? " of " + Display.Size(t) : "")}", Tone.Info));
+            {
+                if (Environment.TickCount64 - shownAt < 200 && p.Done != p.Total) return;
+                shownAt = Environment.TickCount64;
+                ShowNote($"Downloading {link}  {Display.Size(p.Done)}{(p.Total is { } t ? " of " + Display.Size(t) : "")}", Tone.Info);
+            });
             file = await ModDownloader.DownloadAsync(await ModDownloader.ResolveAsync(link, ModDownloader.Api), ModDownloader.Http, progress);
             await InstallAsync(new[] { file });
         }
@@ -587,8 +646,10 @@ public sealed partial class MainForm
     {
         if (m.Locked || !CanChangeFiles()) return;
         if (!Confirm(this, $"Uninstall {m.DisplayName}? Its folder goes to the Recycle Bin.\n\n{m.Folder}")) return;
-        try { FileSystem.DeleteDirectory(m.Folder, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin); }
+        // A big mod takes a while to go to the Recycle Bin; the shell's own dialogs need a thread of their own.
+        try { UseWaitCursor = true; await Ui.RunSta(() => FileSystem.DeleteDirectory(m.Folder, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin)); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or OperationCanceledException) { Error(this, $"Couldn't remove {m.FolderName}: {e.Message}"); }
+        finally { UseWaitCursor = false; }
         await ScanAsync();
     }
 
@@ -610,10 +671,12 @@ public sealed partial class MainForm
         if (!CanChangeFiles()) return;
         try
         {
-            var now = ModLibrary.FixNested(m, AppSettings.BackupFolder);
+            UseWaitCursor = true;
+            var now = await Task.Run(() => ModLibrary.FixNested(m, AppSettings.BackupFolder));
             ShowNote($"Moved {Path.GetFileName(now)} up a level: it is now {now}", Tone.Ok);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Error(this, e.Message); }
+        finally { UseWaitCursor = false; }
         await ScanAsync();
     }
 
@@ -643,15 +706,39 @@ public sealed partial class MainForm
         finally { UseWaitCursor = false; }
     }
 
-    ContextMenuStrip PlayMenu()
+    /// <summary><see cref="BackUpSave"/> off the window's thread: a save can be hundreds of MB to zip.</summary>
+    async Task<string?> BackUpSaveAsync()
     {
+        if (_scan == null) return null;
+        var install = _scan.Install;
+        try
+        {
+            UseWaitCursor = true;
+            return await Task.Run(() => Saves.BackupNewest(install, AppSettings.SaveBackupFolder));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Error(this, "Couldn't back up the newest save: " + e.Message + "\n\nThe mods are changed anyway.");
+            return null;
+        }
+        finally { UseWaitCursor = false; }
+    }
+
+    /// <summary>The Play menu; the dedicated server is looked for off the window's thread (Steam's library folders can be on a sleeping disk).</summary>
+    async Task<ContextMenuStrip> PlayMenuAsync()
+    {
+        var (scan, folder, file) = (_scan, _s.ServerFolder, _s.ServerConfigFile);
+        var (server, hasConfig) = scan == null ? (null, false) : await Task.Run(() =>
+        {
+            var found = DedicatedServer.Find(_steam, folder, scan.Install);
+            return (found, found != null && File.Exists(found.ConfigPath(file)));
+        });
         var menu = new ContextMenuStrip();
         menu.Items.Add(new ToolStripMenuItem("Play with EasyAntiCheat", null, async (_, _) => await PlayAsync(watch: false, EacMode.On)) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripMenuItem("Play without EasyAntiCheat", null, async (_, _) => await PlayAsync(watch: false, EacMode.Off)) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
-        var server = _scan == null ? null : DedicatedServer.Find(_steam, _s.ServerFolder, _scan.Install);
         menu.Items.Add(new ToolStripMenuItem("Start the dedicated server", null, (_, _) => StartServer()) { Enabled = server != null, ToolTipText = server == null ? "No dedicated server found (Options > Dedicated server)" : server.Folder });
-        menu.Items.Add(new ToolStripMenuItem($"Open {_s.ServerConfigFile}", null, (_, _) => Ui.Open(this, server!.ConfigPath(_s.ServerConfigFile))) { Enabled = server != null && File.Exists(server.ConfigPath(_s.ServerConfigFile)) });
+        menu.Items.Add(new ToolStripMenuItem($"Open {_s.ServerConfigFile}", null, (_, _) => Ui.Open(this, server!.ConfigPath(_s.ServerConfigFile))) { Enabled = hasConfig });
         menu.Items.Add(new ToolStripMenuItem("Open the server's Mods folder", null, (_, _) => { Directory.CreateDirectory(server!.Mods); Ui.Open(this, server.Mods); }) { Enabled = server != null });
         return menu;
     }
@@ -684,7 +771,7 @@ public sealed partial class MainForm
         {
             var r = MessageBox.Show(this, "Save your changes to the game before playing?\n\nNo plays with the mods as they are in the folders now.", "Survivor's Toolkit", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
             if (r == DialogResult.Cancel) return;
-            if (r == DialogResult.Yes) { if (!SaveToGame()) return; await ScanAsync(); }
+            if (r == DialogResult.Yes) { if (!await SaveToGameAsync()) return; await ScanAsync(); if (_scan == null) return; }
         }
         if (_found.Any(p => p.Severity == Severity.Error) && !Confirm(this, "The enabled mods have problems (see Problems). Play anyway?", MessageBoxIcon.Warning)) return;
         try
@@ -803,7 +890,7 @@ public sealed partial class MainForm
         _history.Push(_enabled);
         _enabled = list.EnabledIds(_scan);
         _dirty = true;
-        if (SaveToGame())
+        if (await SaveToGameAsync())
         {
             var (eac, options) = list.PlaySettings(_s);
             var own = list.Eac != null || list.LaunchOptions != null ? $" Play uses its own settings: EAC {eac}{(options.Length > 0 ? ", " + options : "")}." : "";
@@ -924,6 +1011,7 @@ public sealed partial class MainForm
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Server sync...", null, async (_, _) => await OpenServerSync()) { Enabled = _scan != null });
         menu.Items.Add("Server panel and console...", null, (_, _) => OpenServerConsole());
+        menu.Items.Add("Save the server's log to files...", null, (_, _) => OpenServerLog());
         menu.Items.Add(new ToolStripMenuItem("What went wrong last time?", null, async (_, _) => await OpenCrashHelperAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripMenuItem("Export a client pack for players...", null, async (_, _) => await ExportClientPackAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
@@ -936,18 +1024,17 @@ public sealed partial class MainForm
     }
 
     /// <summary>Server sync and the client pack go by the mods on disk; unsaved ticks are saved first.</summary>
-    bool SavedForServer()
+    async Task<bool> SavedForServerAsync()
     {
         if (!_dirty) return true;
         if (!Confirm(this, "Your ticks aren't saved to the game yet. Save them first? Server sync and the client pack use the enabled mods.")) return false;
-        if (!SaveToGame()) return false;
-        return true;
+        return await SaveToGameAsync();
     }
 
     async Task OpenServerSync()
     {
         if (_scan == null) return;
-        if (_dirty) { if (!SavedForServer()) return; await ScanAsync(); }
+        if (_dirty) { if (!await SavedForServerAsync()) return; await ScanAsync(); }
         if (_scan == null) return;
         new ServerForm(_s, _scan, Side, SaveSettings).Show(this);
     }
@@ -955,8 +1042,18 @@ public sealed partial class MainForm
     /// <summary>The server panel: status over telnet and the admin console. It needs no mod scan, so it always opens.</summary>
     void OpenServerConsole()
     {
-        if (!Raise<ServerConsoleForm>()) new ServerConsoleForm(_s, SaveSettings, ServerConfig, StartServerQuietly).Show(this);
+        if (!Raise<ServerConsoleForm>()) new ServerConsoleForm(_s, SaveSettings, ServerConfig, StartServerQuietly, OpenServerLog).Show(this);
     }
+
+    /// <summary>Saving the server's log to daily files. It needs no mod scan either.</summary>
+    void OpenServerLog()
+    {
+        if (!Raise<ServerLogForm>()) new ServerLogForm(_s, SaveSettings, LocalServer).Show(this);
+    }
+
+    /// <summary>The dedicated server on this PC, or null.</summary>
+    ServerInstall? LocalServer() =>
+        DedicatedServer.Find(_steam, _s.ServerFolder, _scan?.Install ?? SevenDays.Detect(_steam, _s.GameFolder, _s.UserDataFolder));
 
     async Task OpenServerSyncFromHeader()
     {
@@ -977,7 +1074,7 @@ public sealed partial class MainForm
     async Task ExportClientPackAsync()
     {
         if (_scan == null) return;
-        if (_dirty) { if (!SavedForServer()) return; await ScanAsync(); }
+        if (_dirty) { if (!await SavedForServerAsync()) return; await ScanAsync(); }
         if (_scan == null) return;
         var mods = ClientPack.ClientMods(_scan, Side);
         if (mods.Count == 0) { Info(this, "No enabled mod is for players (Client only, or Server + clients), so there is nothing to pack. The Side column says which are."); return; }
@@ -997,8 +1094,9 @@ public sealed partial class MainForm
     async Task BisectStartAsync()
     {
         if (_scan == null || !CanChangeFiles()) return;
-        if (_dirty && !SaveToGame()) return;
+        if (_dirty && !await SaveToGameAsync()) return;
         await ScanAsync();
+        if (_scan == null) return;
         var suspects = _scan.LoadOrder().Where(m => !m.Locked).Select(m => m.Id).ToList();
         if (suspects.Count < 2) { Info(this, "Finding the broken mod needs at least two enabled mods."); return; }
         if (!Confirm(this, $"This finds which of your {suspects.Count} enabled mods causes a problem, in about {(int)Math.Ceiling(Math.Log2(suspects.Count))} rounds.\n\n" +
@@ -1014,7 +1112,7 @@ public sealed partial class MainForm
         var locked = _scan.Mods.Where(m => m.Locked).Select(m => m.Id);
         _enabled = _bisect.EnabledThisRound(locked);
         _dirty = true;
-        if (!SaveToGame()) { _bisect = null; _bisectBar.Visible = false; await ScanAsync(); return; }
+        if (!await SaveToGameAsync()) { _bisect = null; _bisectBar.Visible = false; await ScanAsync(); return; }
         await ScanAsync();
         _bisectText.Text = $"Finding the broken mod: round {_bisect.Round}, about {_bisect.RoundsLeft} to go. {_bisect.Testing.Count} of {_bisect.Suspects.Count} suspects are on. Play, check, close the game, then:";
         _bisectBar.Visible = true;
@@ -1036,7 +1134,7 @@ public sealed partial class MainForm
         _bisect = null;
         _bisectBar.Visible = false;
         _dirty = true;
-        SaveToGame();
+        await SaveToGameAsync();
         await ScanAsync();
         if (culprit != null && _scan?.ById(culprit) is { } m)
         {

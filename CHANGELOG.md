@@ -3,6 +3,32 @@
 Each `## <version>` section is shown in the app once after it updates to that version (and all of them under
 **Options > About > What's new**), and the Release workflow uses it as the release's notes.
 
+## 0.4.0
+
+- **Setup.exe that updates like other desktop apps.** Each release now also has `SurvivorsToolkit-<version>-Setup.exe`
+  (built with [Velopack](https://velopack.io), the same as ModWright). It installs the app for your Windows user with
+  Start menu and desktop shortcuts, no administrator rights needed, and updates it with a separate updater that swaps
+  versions after the app has closed and only downloads what changed.
+- **A small zip build.** `SurvivorsToolkit-<version>-win-x64-framework-dependent.zip` is a folder build for machines
+  with the .NET 8 Desktop Runtime, or where antivirus refuses the large single-file exe. It updates itself from the
+  next release's zip.
+- The standalone exe still updates itself as before.
+- **Save the server's log to files.** **Save the log to files...** in the server panel (or **Tools > Save the
+  server's log to files**) keeps the server's errors, warnings and every line in three files a day
+  (`errors-`, `warnings-` and `everything-<date>.log`), each one only when it is ticked. A new set starts at midnight
+  and days older than the ones you keep (14 unless you change it) are deleted. The log comes from the dedicated
+  server's log file on this PC, or from the telnet console for a hosted server, which connects again by itself when
+  the server restarts. It can start when the app opens, and `SurvivorsToolkit serverlog` does the same with no window.
+- **Share a day of logs.** **Zip it to share** (or the last 7 days) makes a zip of that day's files, shows it in
+  Explorer and puts it on the clipboard, ready to paste into Discord or an email.
+
+- **Saved logins.** Server sync and the server panel each have a **Saved login** row: keep a server's details under a
+  name (with or without its password, kept encrypted for your Windows account) and pick it next time to fill
+  everything in. **Forget** drops one.
+- **An app icon.** The exe, the taskbar and every window now show the Survivor's Toolkit cog and wrench.
+- **Fewer freezes.** Saving to the game, uninstalling, finding the game and the dedicated server, downloads and update
+  checks run in the background, so the window keeps responding during slow disk and network work.
+
 ## 0.3.0
 
 - **Tools in the header bar.** SERVER, SYNC, SAVES, LOG, CRASH and TWEAKS sit next to MODS and OPTIONS and open their

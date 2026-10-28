@@ -16,11 +16,12 @@ namespace SurvivorsToolkit.Core;
 /// SurvivorsToolkit status [--json]      the server's day, players and blood moon over its telnet console
 /// SurvivorsToolkit rcon &lt;command&gt;       send one command to the server's telnet console
 /// SurvivorsToolkit restart [--now]      warn the players, save the world, shut the server down (and start it again)
+/// SurvivorsToolkit serverlog            save the server's log to daily files until Ctrl+C
 /// </code>
 /// </summary>
 public static class Cli
 {
-    public static readonly string[] Commands = { "list", "problems", "lists", "switch", "play", "install", "updates", "server", "status", "rcon", "restart", "help", "--help", "-h", "/?" };
+    public static readonly string[] Commands = { "list", "problems", "lists", "switch", "play", "install", "updates", "server", "status", "rcon", "restart", "serverlog", "help", "--help", "-h", "/?" };
 
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0].ToLowerInvariant());
 
@@ -33,6 +34,8 @@ public static class Cli
 
         // These two only talk to the server's console, so they don't need the game installed here.
         if (cmd is "status" or "rcon" or "restart") return Console_(cmd, rest, s, o, json, args.Contains("--now")).GetAwaiter().GetResult();
+
+        if (cmd == "serverlog") return ServerLog(s, o);
 
         var steam = SteamLibraries.Find();
         var install = SevenDays.Detect(steam, s.GameFolder, s.UserDataFolder);
@@ -180,6 +183,38 @@ public static class Cli
         }
     }
 
+    /// <summary>
+    /// serverlog: saves the server's log to the daily files until Ctrl+C, the same way the app's Server log window
+    /// does, so a server PC can keep its logs with no window open (a Task Scheduler task "at log on").
+    /// </summary>
+    static int ServerLog(AppSettings s, TextWriter o)
+    {
+        var plan = s.ServerLogs;
+        if (!plan.Any) { o.WriteLine("Nothing to save: pick errors, warnings or everything in the app's Server log window."); return 2; }
+        Func<CancellationToken, Task> follow;
+        using var writer = new ServerLogWriter(plan.FolderOrDefault, plan);
+        void Status(string line) => o.WriteLine($"{DateTime.Now:HH:mm:ss}  {line}");
+        using var stop = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
+        if (plan.Source == ServerLogSource.Telnet)
+        {
+            if (!s.Telnet.IsSet) { o.WriteLine("No server console is set up. Open the app, Tools > Server panel and console, and fill in the address, port and password."); return 2; }
+            var t = s.Telnet;
+            follow = ct => ServerLogs.FollowConsoleAsync(writer,
+                async c => await TelnetConsole.ConnectAsync(t.Host, t.Port, Secrets.Unprotect(t.ProtectedPassword), c), t.Describe, Status, ct);
+        }
+        else
+        {
+            var steam = SteamLibraries.Find();
+            var game = SevenDays.Detect(steam, s.GameFolder, s.UserDataFolder);
+            if (DedicatedServer.Find(steam, s.ServerFolder, game) is not { } server) { o.WriteLine("There is no dedicated server on this PC. Pick its folder in Options, or save the log over the server's console instead."); return 2; }
+            follow = ct => ServerLogs.FollowFileAsync(writer, () => ServerLogs.NewestLog(server), Status, ct);
+        }
+        o.WriteLine($"Saving the server's log to {writer.Folder} until Ctrl+C.");
+        follow(stop.Token).GetAwaiter().GetResult();
+        return 0;
+    }
+
     static bool Switch(string name, LibraryScan scan, ModlistStore store, AppSettings s, TextWriter o)
     {
         var list = store.Get(name);
@@ -212,5 +247,7 @@ public static class Cli
           SurvivorsToolkit rcon <command>        send one command to that console ("say hello", "saveworld")
           SurvivorsToolkit restart [--now]       warn the players in chat, save the world, shut the server down, and
                                                  start it again if the plan says so (--now skips the warnings)
+          SurvivorsToolkit serverlog             save the server's log to daily errors, warnings and everything files
+                                                 until Ctrl+C (set up in the app's Server log window)
         """;
 }

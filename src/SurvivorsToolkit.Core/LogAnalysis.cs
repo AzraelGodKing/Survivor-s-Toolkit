@@ -69,6 +69,14 @@ public static partial class LogAnalysis
         return result;
     }
 
+    /// <summary>The level of a line that starts a log entry, or null for a line that runs on from the one before (a stack trace).</summary>
+    public static LogLevel? LevelOf(string line)
+    {
+        var m = EntryRx().Match(line);
+        if (!m.Success) return null;
+        return m.Groups[1].Value switch { "ERR" or "EXC" => LogLevel.Error, "WRN" => LogLevel.Warning, _ => LogLevel.Info };
+    }
+
     /// <summary>The lines that pass the line view's filters: a mod (null: any), the lowest level, and text to find.</summary>
     public static List<LogLine> Filter(IReadOnlyList<LogLine> lines, string? modId, LogLevel atLeast, string? find, bool xmlOnly = false)
     {

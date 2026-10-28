@@ -7,11 +7,20 @@
     <AssemblyName>SurvivorsToolkit</AssemblyName>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <Product>Survivor's Toolkit</Product>
+    <!-- The exe's icon in Explorer, the taskbar and shortcuts. Drawn from Assets/app.svg (app-32.svg and app-16.svg are
+         the simpler versions used for the 32/48 and 16/24 px frames). -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Description>Craft your 7d2d experience. A mod manager for 7 Days to Die: turn mods on and off, install from zips, modlists, problems and the game's log.</Description>
   </PropertyGroup>
   <ItemGroup>
     <!-- Keeps the server's FTP password encrypted for the Windows user (DPAPI). -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <!-- Installs and updates the app the way most desktop apps do (a separate Update.exe swaps versions); see AppUpdates.cs. -->
+    <PackageReference Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The same icon for every window's title bar (Theme.AppIcon). -->
+    <EmbeddedResource Include="Assets\app.ico" LogicalName="SurvivorsToolkit.app.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SurvivorsToolkit.Core\SurvivorsToolkit.Core.csproj" />

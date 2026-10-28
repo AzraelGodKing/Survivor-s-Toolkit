@@ -21,6 +21,7 @@ sealed class ServerForm : Form
     readonly TextBox _password = new() { Width = 180, UseSystemPasswordChar = true };
     readonly TextBox _remotePath = new() { Width = 260, PlaceholderText = "Mods" };
     readonly TableLayoutPanel _folderRow, _hostRow, _loginRow, _pathRow;
+    readonly SavedLoginBar _logins;
     readonly ListView _list = new() { View = View.Details, FullRowSelect = true, CheckBoxes = true, HideSelection = false, Dock = DockStyle.Fill, ShowItemToolTips = true, AccessibleName = "Mods to send to or remove from the server" };
     readonly Label _status = Muted();
     readonly Button _compare, _push, _stop;
@@ -49,9 +50,10 @@ sealed class ServerForm : Form
         _hostRow = Row(Lbl("Host"), _host, Lbl("Port"), _port);
         _loginRow = Row(Lbl("User"), _user, Lbl("Password"), _password);
         _pathRow = Row(Lbl("Mods folder on the server"), _remotePath, Muted("from the login's home folder"));
+        _logins = new SavedLoginBar(this, _s, _saveSettings, telnet: false, () => _host.Text, () => _password.Text.Length > 0, SaveLogin, UseLogin);
         _kind.SelectedIndexChanged += (_, _) => { if (!_filling) ShowRows(); };
-        var setup = Card("Server", null, Row(Lbl("Reach it through"), _kind), _folderRow, _hostRow, _loginRow, _pathRow,
-            Row(Muted("The FTP password is kept encrypted for your Windows account. SFTP isn't supported; most hosts also offer FTP.")));
+        var setup = Card("Server", null, Row(Lbl("Reach it through"), _kind), _logins.Row, _folderRow, _hostRow, _loginRow, _pathRow,
+            Row(Muted("The FTP password is kept encrypted for your Windows account. Save login keeps this server under a name (with or without its password) to fill it in with one click next time. SFTP isn't supported; most hosts also offer FTP.")));
 
         foreach (var (name, w) in new[] { ("", 90), ("Mod", 260), ("Here", 80), ("Server", 80), ("Why", 380) }) _list.Columns.Add(name, (int)(w * Theme.TextScale));
         _compare = SmallBtn("Compare", async (_, _) => await CompareAsync());
@@ -100,7 +102,24 @@ sealed class ServerForm : Form
     {
         var folder = _kind.SelectedIndex == 0;
         _folderRow.Visible = folder;
-        _hostRow.Visible = _loginRow.Visible = _pathRow.Visible = !folder;
+        _hostRow.Visible = _loginRow.Visible = _pathRow.Visible = _logins.Row.Visible = !folder;
+    }
+
+    /// <summary>Keeps the FTP details in the boxes under a name, for <see cref="SavedLoginBar"/>.</summary>
+    SavedLogin? SaveLogin(string name, bool keepPassword)
+    {
+        Keep();
+        if (_s.Server.Kind != ServerKind.Ftp || !_s.Server.IsSet) { Error(this, "Fill in the FTP host first."); return null; }
+        return SavedLogins.SaveFtp(_s.Logins, name, _s.Server, keepPassword, DateTime.Now);
+    }
+
+    /// <summary>Fills the boxes from a saved login; the password box is left for the player when it wasn't kept.</summary>
+    void UseLogin(SavedLogin login)
+    {
+        if (!SavedLogins.UseFtp(login, _s.Server, DateTime.Now)) return;
+        Fill();
+        _status.Text = $"Using the saved login {login.Name}." + (_password.Text.Length == 0 ? " Type its password, then press Compare." : " Press Compare to read the server.");
+        if (_password.Text.Length == 0) _password.Focus();
     }
 
     /// <summary>Saves what is in the boxes to the settings.</summary>
@@ -123,7 +142,7 @@ sealed class ServerForm : Form
         _compare.Enabled = !busy;
         _push.Enabled = !busy && _list.Items.Cast<ListViewItem>().Any(i => i.Checked);
         _stop.Enabled = busy;
-        _kind.Enabled = _folder.Enabled = _host.Enabled = _port.Enabled = _user.Enabled = _password.Enabled = _remotePath.Enabled = !busy;
+        _kind.Enabled = _folder.Enabled = _host.Enabled = _port.Enabled = _user.Enabled = _password.Enabled = _remotePath.Enabled = _logins.Enabled = !busy;
         UseWaitCursor = busy;
     }
 

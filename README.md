@@ -10,6 +10,22 @@ It finds the game through your Steam libraries (or a folder you pick) and reads 
 loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothing is changed until you press
 **Save to game**, and nothing is changed while the game is running.
 
+## Download
+
+Each [release](https://github.com/AzraelGodKing/Survivor-s-Toolkit/releases) has three ways to get it, the same as
+ModWright:
+
+- `SurvivorsToolkit-<version>-Setup.exe`: installs the app for your Windows user (no administrator rights) with Start
+  menu and desktop shortcuts, and keeps it up to date the way most desktop apps do: a separate updater
+  ([Velopack](https://velopack.io)) swaps in the new version after the app has closed, downloading only what changed.
+  Recommended. Uninstall it from Windows' **Installed apps**; your settings stay in `%LocalAppData%\SurvivorsToolkit`.
+- `SurvivorsToolkit-<version>-win-x64.exe`: a single self-contained exe; no .NET install needed.
+- `SurvivorsToolkit-<version>-win-x64-framework-dependent.zip`: a small folder build that needs the
+  [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Use it if Windows or your antivirus
+  refuses to launch the large single-file exe.
+
+All three update themselves (see **Updates** below).
+
 ## Using it
 
 - **Mods:** tick a mod to enable it. **Save to game** (Ctrl+S) moves unticked mods to a `Mods-disabled` folder next
@@ -76,6 +92,22 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   address, port, password and blood moon frequency in from the dedicated server's own `serverconfig.xml` when there is
   one on this PC; for a hosted server, copy them from your host's panel. The password is kept encrypted for your
   Windows account.
+- **Saved logins:** Server sync and the server panel each have a **Saved login** row. **Save login...** keeps what is
+  in the boxes under a name ("My 7d2d.net server"), and asks whether to keep the password too (encrypted for your
+  Windows account) or leave it out so you type it each time. Next time, pick the login from the list and everything is
+  filled in; in the server panel it connects straight away when the password was kept. The FTP details (Server sync)
+  and the telnet details (server panel) can be kept under the same name, since a host gives you both for one server.
+  **Forget** drops the picked login.
+- **Server log files:** **Save the log to files...** in the server panel (or **Tools > Save the server's log to
+  files**) saves the server's log as it is written, in three files a day in `%LocalAppData%\SurvivorsToolkit\server-logs`
+  (or a folder you pick): `errors-<date>.log` (errors and exceptions with their stack traces), `warnings-<date>.log`
+  and `everything-<date>.log`. Tick the ones you want. A new set starts at midnight, and days older than the number
+  you keep (14 by default; 0 keeps them all) are deleted. The log is read from the newest `output_log` of the dedicated
+  server on this PC, or from its telnet console for a hosted server (the same address and password as the server
+  panel; the console prints the log as it happens, and it connects again after a restart). Saving carries on when the
+  window is closed and can start with the app; `SurvivorsToolkit serverlog` does it with no window, for Task Scheduler.
+  **Zip it to share** zips a day (or the last 7 days) into the `shared` folder, shows it in Explorer and puts it on the
+  clipboard to paste into Discord or an email.
 - **Worlds and saves:** **Saves...** lists your worlds with the saves in each, when they were last played and what
   they take up, and the map the game built for a random gen world (`GeneratedWorlds`), which is usually the biggest
   thing in there. Rename a save, or a whole world (its map is renamed with it), back a save up to a zip, restore one
@@ -123,17 +155,19 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   are installed, EasyAntiCheat and launch options.
 
 - **Updates:** at start-up the app asks GitHub for a newer release and offers **Update now**, **Release notes** or
-  **Later**, with a box to stop reminding you about that version. **Update now** downloads the new exe and checks it
-  against the release's `SHA256SUMS.txt`, then offers **Restart now** or **When I close the app**; until it is
-  installed, a **Restart now** link at the bottom of the window says it is ready. The old exe is kept as
-  `<name>.update-old` until the next start, and put back if Windows (or antivirus) won't run the new one. With
+  **Later**, with a box to stop reminding you about that version. **Update now** downloads the new version and checks it
+  against the release's checksums, then offers **Restart now** or **When I close the app**; until it is
+  installed, a **Restart now** link at the bottom of the window says it is ready. A copy installed with the
+  Setup.exe is updated by Velopack's updater once the app has closed. The standalone exe and the zip build update
+  themselves from the release's exe or zip: the old files are kept as `<name>.update-old` until the next start, and
+  put back if Windows (or antivirus) won't run the new one. With
   **Options > About > Download new versions by themselves** on, a new version is downloaded in the background and
   installed when you close the app, without asking. After an update the changes since your version are shown once
   (from `CHANGELOG.md`, built into the app); **What's new** shows them all. Only GitHub's public list of releases is
-  read. Turn the check off, or **Check now**, under **Options > About**. Only the single-file exe updates itself; a
-  copy that can't (a folder it can't write to, or a `dotnet build`) offers **Download** through the browser instead.
+  read. Turn the check off, or **Check now**, under **Options > About**. A copy that can't update itself (a folder
+  it can't write to, or `dotnet run`) offers **Download** through the browser instead.
 
-Settings, profiles (the `modlists` folder) and backups are in `%LocalAppData%\SurvivorsToolkit`.
+Settings, profiles (the `modlists` folder), backups and server logs are in `%LocalAppData%\SurvivorsToolkit`.
 
 ## Command line
 
@@ -149,6 +183,7 @@ SurvivorsToolkit server                start the dedicated server on this PC
 SurvivorsToolkit status [--json]       the server's day, players and blood moon, over its telnet console
 SurvivorsToolkit rcon <command>        send one command to that console ("say hello", "saveworld")
 SurvivorsToolkit restart [--now]       warn the players, save the world, shut the server down, start it again
+SurvivorsToolkit serverlog             save the server's log to daily errors, warnings and everything files until Ctrl+C
 ```
 
 A desktop shortcut to `SurvivorsToolkit.exe play "Horde night"` starts that setup in one click, and a Windows
@@ -176,8 +211,10 @@ On `test`, bump `<Version>` in `Directory.Build.props` and add a `## <version>` 
 `test` is ready, run **Promote test and release** (Actions tab; tick **dry_run** to only check and test). It merges
 `main` into `test` if `test` doesn't already contain it, runs the tests, fast-forwards `main` to `test`, tags it
 `v<version>` and leaves `test` at the same commit, all in one push. The tag starts the **Release** workflow, which
-refuses a version with no changelog section, tests, publishes `SurvivorsToolkit-<version>-win-x64.exe` (ReadyToRun,
-so it starts quickly) and `SHA256SUMS.txt`, and creates the release `v<version>` with that section as its notes, which
+refuses a version with no changelog section, tests, publishes the Setup.exe with its Velopack update packages
+(`*.nupkg`, `releases.win.json`, `assets.win.json`, `RELEASES`; a delta from the previous release when there is one),
+`SurvivorsToolkit-<version>-win-x64.exe`, the framework-dependent zip (all ReadyToRun, so they start quickly) and
+`SHA256SUMS.txt`, and creates the release `v<version>` with that section as its notes, which
 is what the app's update check looks for. The same section is what the app shows once after updating to that version.
 A version with a `-` (such as `0.4.0-beta.1`) becomes a pre-release, which the update check skips.
 

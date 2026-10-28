@@ -8,7 +8,10 @@ namespace SurvivorsToolkit.Core;
 /// <param name="ExeUrl">The single-file exe ("SurvivorsToolkit-1.2.0-win-x64.exe").</param>
 /// <param name="ChecksumsUrl">SHA256SUMS.txt, which every update is checked against.</param>
 /// <param name="Notes">The release's description (its change notes), or "".</param>
-public sealed record ReleaseInfo(string Version, string PageUrl, string? ExeUrl, string? ChecksumsUrl, string Notes = "");
+/// <param name="ZipUrl">The framework-dependent folder build ("SurvivorsToolkit-1.2.0-win-x64-framework-dependent.zip").</param>
+/// <param name="SetupUrl">The Setup.exe ("SurvivorsToolkit-1.2.0-Setup.exe"), which installs a copy that updates through Velopack.</param>
+public sealed record ReleaseInfo(string Version, string PageUrl, string? ExeUrl, string? ChecksumsUrl, string Notes = "",
+    string? ZipUrl = null, string? SetupUrl = null);
 
 /// <summary>
 /// Looks up the newest release of Survivor's Toolkit on GitHub: releases tagged "v&lt;version&gt;" in its own repository. Only
@@ -44,7 +47,7 @@ public static class UpdateCheck
     {
         try
         {
-            var latest = Newest(await Http.GetStringAsync(ReleasesUrl, ct));
+            var latest = Newest(await Http.GetStringAsync(ReleasesUrl, ct).ConfigureAwait(false));
             return latest != null && IsNewer(latest.Version, current) ? latest : null;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -77,7 +80,9 @@ public static class UpdateCheck
             : new();
         var exe = assets.FirstOrDefault(x => x.Name.EndsWith("-win-x64.exe", StringComparison.OrdinalIgnoreCase)).Url;
         var sums = assets.FirstOrDefault(x => x.Name.Equals("SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase)).Url;
-        return new ReleaseInfo(version, Str(r, "html_url") ?? ReleasesPage, exe, sums, Str(r, "body") ?? "");
+        var zip = assets.FirstOrDefault(x => x.Name.EndsWith("-win-x64-framework-dependent.zip", StringComparison.OrdinalIgnoreCase)).Url;
+        var setup = assets.FirstOrDefault(x => x.Name.EndsWith("-Setup.exe", StringComparison.OrdinalIgnoreCase)).Url;
+        return new ReleaseInfo(version, Str(r, "html_url") ?? ReleasesPage, exe, sums, Str(r, "body") ?? "", zip, setup);
     }
 
     /// <summary>True when <paramref name="latest"/> is a higher version than <paramref name="current"/> (1.10.0 &gt; 1.9.0).</summary>
