@@ -1011,6 +1011,7 @@ public sealed partial class MainForm
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Server sync...", null, async (_, _) => await OpenServerSync()) { Enabled = _scan != null });
         menu.Items.Add("Server panel and console...", null, (_, _) => OpenServerConsole());
+        menu.Items.Add("Save the server's log to files...", null, (_, _) => OpenServerLog());
         menu.Items.Add(new ToolStripMenuItem("What went wrong last time?", null, async (_, _) => await OpenCrashHelperAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripMenuItem("Export a client pack for players...", null, async (_, _) => await ExportClientPackAsync()) { Enabled = _scan != null });
         menu.Items.Add(new ToolStripSeparator());
@@ -1041,8 +1042,18 @@ public sealed partial class MainForm
     /// <summary>The server panel: status over telnet and the admin console. It needs no mod scan, so it always opens.</summary>
     void OpenServerConsole()
     {
-        if (!Raise<ServerConsoleForm>()) new ServerConsoleForm(_s, SaveSettings, ServerConfig, StartServerQuietly).Show(this);
+        if (!Raise<ServerConsoleForm>()) new ServerConsoleForm(_s, SaveSettings, ServerConfig, StartServerQuietly, OpenServerLog).Show(this);
     }
+
+    /// <summary>Saving the server's log to daily files. It needs no mod scan either.</summary>
+    void OpenServerLog()
+    {
+        if (!Raise<ServerLogForm>()) new ServerLogForm(_s, SaveSettings, LocalServer).Show(this);
+    }
+
+    /// <summary>The dedicated server on this PC, or null.</summary>
+    ServerInstall? LocalServer() =>
+        DedicatedServer.Find(_steam, _s.ServerFolder, _scan?.Install ?? SevenDays.Detect(_steam, _s.GameFolder, _s.UserDataFolder));
 
     async Task OpenServerSyncFromHeader()
     {

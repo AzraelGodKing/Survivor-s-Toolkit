@@ -98,6 +98,16 @@ All three update themselves (see **Updates** below).
   filled in; in the server panel it connects straight away when the password was kept. The FTP details (Server sync)
   and the telnet details (server panel) can be kept under the same name, since a host gives you both for one server.
   **Forget** drops the picked login.
+- **Server log files:** **Save the log to files...** in the server panel (or **Tools > Save the server's log to
+  files**) saves the server's log as it is written, in three files a day in `%LocalAppData%\SurvivorsToolkit\server-logs`
+  (or a folder you pick): `errors-<date>.log` (errors and exceptions with their stack traces), `warnings-<date>.log`
+  and `everything-<date>.log`. Tick the ones you want. A new set starts at midnight, and days older than the number
+  you keep (14 by default; 0 keeps them all) are deleted. The log is read from the newest `output_log` of the dedicated
+  server on this PC, or from its telnet console for a hosted server (the same address and password as the server
+  panel; the console prints the log as it happens, and it connects again after a restart). Saving carries on when the
+  window is closed and can start with the app; `SurvivorsToolkit serverlog` does it with no window, for Task Scheduler.
+  **Zip it to share** zips a day (or the last 7 days) into the `shared` folder, shows it in Explorer and puts it on the
+  clipboard to paste into Discord or an email.
 - **Worlds and saves:** **Saves...** lists your worlds with the saves in each, when they were last played and what
   they take up, and the map the game built for a random gen world (`GeneratedWorlds`), which is usually the biggest
   thing in there. Rename a save, or a whole world (its map is renamed with it), back a save up to a zip, restore one
@@ -157,7 +167,7 @@ All three update themselves (see **Updates** below).
   read. Turn the check off, or **Check now**, under **Options > About**. A copy that can't update itself (a folder
   it can't write to, or `dotnet run`) offers **Download** through the browser instead.
 
-Settings, profiles (the `modlists` folder) and backups are in `%LocalAppData%\SurvivorsToolkit`.
+Settings, profiles (the `modlists` folder), backups and server logs are in `%LocalAppData%\SurvivorsToolkit`.
 
 ## Command line
 
@@ -173,6 +183,7 @@ SurvivorsToolkit server                start the dedicated server on this PC
 SurvivorsToolkit status [--json]       the server's day, players and blood moon, over its telnet console
 SurvivorsToolkit rcon <command>        send one command to that console ("say hello", "saveworld")
 SurvivorsToolkit restart [--now]       warn the players, save the world, shut the server down, start it again
+SurvivorsToolkit serverlog             save the server's log to daily errors, warnings and everything files until Ctrl+C
 ```
 
 A desktop shortcut to `SurvivorsToolkit.exe play "Horde night"` starts that setup in one click, and a Windows

@@ -13,6 +13,7 @@ sealed class ServerConsoleForm : Form
     readonly Action _saveSettings;
     readonly Func<string?> _localConfig;
     readonly Func<bool> _startServer;
+    readonly Action _openServerLog;
 
     readonly TextBox _host = new() { Width = 220, PlaceholderText = "127.0.0.1 or your host's address" };
     readonly NumericUpDown _port = new() { Minimum = 1, Maximum = 65535, Value = 8081, Width = 90 };
@@ -38,12 +39,13 @@ sealed class ServerConsoleForm : Form
     IServerConsole? _console;
     bool _busy, _filling;
 
-    public ServerConsoleForm(AppSettings s, Action saveSettings, Func<string?> localConfig, Func<bool> startServer)
+    public ServerConsoleForm(AppSettings s, Action saveSettings, Func<string?> localConfig, Func<bool> startServer, Action openServerLog)
     {
         _s = s;
         _saveSettings = saveSettings;
         _localConfig = localConfig;
         _startServer = startServer;
+        _openServerLog = openServerLog;
         Text = "Server panel - Survivor's Toolkit";
         Font = Theme.BodyFont;
         Size = new Size(1040, 820);
@@ -58,7 +60,8 @@ sealed class ServerConsoleForm : Form
 
         var restarts = SmallBtn("Scheduled restarts...", (_, _) => { Keep(); new RestartsForm(_s, _saveSettings, _startServer).Show(this); });
         _logins = new SavedLoginBar(this, _s, _saveSettings, telnet: true, () => _host.Text, () => _password.Text.Length > 0, SaveLogin, UseLogin);
-        var setup = Card("Console", new Control[] { restarts, _connect, _disconnect },
+        var serverLog = SmallBtn("Save the log to files...", (_, _) => { Keep(); _openServerLog(); });
+        var setup = Card("Console", new Control[] { restarts, serverLog, _connect, _disconnect },
             _logins.Row,
             Row(Lbl("Address"), _host, Lbl("Port"), _port, Lbl("Password"), _password, _fromConfig),
             Row(Lbl("Blood moon every"), _bloodMoon, Muted("days (BloodMoonFrequency); 0 turns the countdown off"), _auto),

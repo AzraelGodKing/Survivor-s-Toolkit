@@ -52,6 +52,8 @@ public sealed class AppSettings
     public List<SavedLogin> Logins { get; set; } = new();
     /// <summary>The scheduled restart: when, what the warnings say, and whether the server here is started again.</summary>
     public RestartPlan Restarts { get; set; } = new();
+    /// <summary>Saving the server's log to daily files: which ones, where from, and for how long.</summary>
+    public ServerLogPlan ServerLogs { get; set; } = new();
     /// <summary>Look for a newer version of the app at start-up.</summary>
     public bool CheckForUpdates { get; set; } = true;
     /// <summary>
@@ -97,6 +99,7 @@ public sealed class AppSettings
                 s.Telnet ??= new TelnetTarget();
                 s.Logins ??= new List<SavedLogin>();
                 s.Restarts ??= new RestartPlan();
+                s.ServerLogs ??= new ServerLogPlan();
                 return s;
             }
         }
