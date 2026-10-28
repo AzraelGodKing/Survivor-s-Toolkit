@@ -22,6 +22,13 @@ Each `## <version>` section is shown in the app once after it updates to that ve
 - **Share a day of logs.** **Zip it to share** (or the last 7 days) makes a zip of that day's files, shows it in
   Explorer and puts it on the clipboard, ready to paste into Discord or an email.
 
+- **Saved logins.** Server sync and the server panel each have a **Saved login** row: keep a server's details under a
+  name (with or without its password, kept encrypted for your Windows account) and pick it next time to fill
+  everything in. **Forget** drops one.
+- **An app icon.** The exe, the taskbar and every window now show the Survivor's Toolkit cog and wrench.
+- **Fewer freezes.** Saving to the game, uninstalling, finding the game and the dedicated server, downloads and update
+  checks run in the background, so the window keeps responding during slow disk and network work.
+
 ## 0.3.0
 
 - **Tools in the header bar.** SERVER, SYNC, SAVES, LOG, CRASH and TWEAKS sit next to MODS and OPTIONS and open their
