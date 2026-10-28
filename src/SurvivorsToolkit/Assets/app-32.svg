@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2e2924"/><stop offset="1" stop-color="#0d0c0b"/></linearGradient>
+    <linearGradient id="rust" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e8964f"/><stop offset=".5" stop-color="#b2541e"/><stop offset="1" stop-color="#682a0c"/></linearGradient>
+    <linearGradient id="bone" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6efe0"/><stop offset="1" stop-color="#bfb59f"/></linearGradient>
+    <linearGradient id="blood" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ce2420"/><stop offset="1" stop-color="#7a0c0c"/></linearGradient>
+    <clipPath id="tile"><rect x="12" y="12" width="232" height="232" rx="44"/></clipPath>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="48" fill="url(#bg)" stroke="#4e4236" stroke-width="6"/>
+  
+  <path d="M114.13,55.31 L115.22,32.85 L140.78,32.85 L141.87,55.31 L169.59,66.80 L186.24,51.69 L204.31,69.76 L189.20,86.41 L200.69,114.13 L223.15,115.22 L223.15,140.78 L200.69,141.87 L189.20,169.59 L204.31,186.24 L186.24,204.31 L169.59,189.20 L141.87,200.69 L140.78,223.15 L115.22,223.15 L114.13,200.69 L86.41,189.20 L69.76,204.31 L51.69,186.24 L66.80,169.59 L55.31,141.87 L32.85,140.78 L32.85,115.22 L55.31,114.13 L66.80,86.41 L51.69,69.76 L69.76,51.69 L86.41,66.80 Z" fill="url(#rust)" stroke="#3a1a08" stroke-width="0" stroke-linejoin="round"/>
+  <circle cx="128" cy="128" r="40" fill="#181614" stroke="#682a0c" stroke-width="4"/>
+  <circle cx="128" cy="128" r="18" fill="#9e1616"/>
+  <g transform="rotate(-45 128 128)" fill="url(#bone)" stroke="#2a2018" stroke-width="5" stroke-linejoin="round"><path d="M118 35.85 L118 54 L138 54 L138 35.85 A28 28 0 1 1 118 35.85 Z M117 84 h22 v106 a11 11 0 0 1 -22 0 Z"/></g>
+</svg>
