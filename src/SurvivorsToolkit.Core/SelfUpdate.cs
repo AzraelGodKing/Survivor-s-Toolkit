@@ -1,20 +1,35 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Security.Cryptography;
 
 namespace SurvivorsToolkit.Core;
 
-/// <summary>A downloaded, checked update waiting in <see cref="StagingDir"/> to be installed.</summary>
-public sealed record PreparedUpdate(string Version, string StagingDir)
+/// <summary>How this copy of the program was installed, which decides what an update downloads.</summary>
+public enum InstallKind
 {
+    /// <summary>The standalone self-contained exe: updated by swapping that one file.</summary>
+    SingleFile,
+    /// <summary>The framework-dependent folder build: updated from the release zip.</summary>
+    Folder,
+}
+
+/// <summary>A downloaded, checked update waiting in <see cref="StagingDir"/> to be installed.</summary>
+public sealed record PreparedUpdate(string Version, string StagingDir, InstallKind Kind = InstallKind.SingleFile)
+{
+    /// <summary>The unpacked folder build in the staging folder (only for <see cref="InstallKind.Folder"/>).</summary>
+    public string FilesDir => Path.Combine(StagingDir, "files");
+
     /// <summary>The downloaded program in its staging folder.</summary>
-    public string Exe => Path.Combine(StagingDir, SelfUpdate.ExeName);
+    public string Exe => Path.Combine(Kind == InstallKind.SingleFile ? StagingDir : FilesDir, SelfUpdate.ExeName);
 }
 
 /// <summary>
-/// Updates the single-file exe in place from a GitHub release, the way ModWright does. The download is accepted only
-/// when its SHA-256 matches the release's SHA256SUMS.txt and it carries the expected version. Installing renames the
-/// exe being replaced to "&lt;name&gt;.update-old", copies the new one in, and puts the old one back if any step fails;
-/// the next start deletes the leftover.
+/// Updates the program in place from a GitHub release, the way ModWright does: the single-file exe from the release's
+/// exe, the framework-dependent folder build from its zip. (A copy installed with the Setup.exe updates through Velopack
+/// instead; see AppUpdates in the app.) The download is accepted only when its SHA-256 matches the release's
+/// SHA256SUMS.txt and it carries the expected version. Installing renames each file being replaced to
+/// "&lt;name&gt;.update-old", copies the new one in, and puts the old ones back if any step fails; the next start deletes
+/// the leftovers.
 /// <para>The running program never swaps its own file: .NET reads parts of a single-file program from its exe for as
 /// long as it runs. Instead the downloaded program is started from the staging folder (<see cref="HandOff"/>); it waits
 /// for this one to exit, installs itself (<see cref="Finish"/>) and, when asked, starts the installed copy. So an update
@@ -24,6 +39,7 @@ public static class SelfUpdate
 {
     public const string OldSuffix = ".update-old";
     public const string ExeName = "SurvivorsToolkit.exe";
+    const string DllName = "SurvivorsToolkit.dll";
     const long MaxDownloadBytes = 400L * 1024 * 1024;
 
     /// <summary>
@@ -34,20 +50,28 @@ public static class SelfUpdate
     /// <summary>Passed to the new program after an update, followed by the version it replaced.</summary>
     public const string UpdatedFromArg = "--updated-from";
 
-    /// <summary>The running exe, or null when it isn't a single-file exe (a dotnet run or a folder build can't update itself).</summary>
+    /// <summary>The running exe, or null when the program isn't run from an exe (dotnet run can't update itself).</summary>
     public static string? RunningExe()
     {
         var path = Environment.ProcessPath;
-        if (path == null || !path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return null;
-        // A folder build has the app's own DLL next to the exe; the single-file exe has it bundled inside.
-        return File.Exists(Path.Combine(Path.GetDirectoryName(path)!, "SurvivorsToolkit.dll")) ? null : path;
+        return path != null && path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? path : null;
     }
+
+    /// <summary>A folder build has the app's own DLL next to the exe; the single-file exe has it bundled inside.</summary>
+    public static InstallKind KindOf(string appDir) =>
+        File.Exists(Path.Combine(appDir, DllName)) ? InstallKind.Folder : InstallKind.SingleFile;
+
+    /// <summary>Where an update for <paramref name="kind"/> comes from, or null when the release has no file for it.</summary>
+    public static string? AssetFor(ReleaseInfo r, InstallKind kind) => kind == InstallKind.SingleFile ? r.ExeUrl : r.ZipUrl;
 
     /// <summary>Why this copy can't update itself from <paramref name="r"/> (then the release page is offered), or null when it can.</summary>
     public static string? CannotUpdateReason(ReleaseInfo r, string? exe)
     {
-        if (exe == null) return "This copy isn't the single-file exe, so it can't replace itself.";
-        if (r.ExeUrl == null) return "The release has no exe to download.";
+        if (exe == null) return "This copy isn't run from its exe, so it can't replace itself.";
+        if (AssetFor(r, KindOf(Path.GetDirectoryName(exe)!)) == null)
+            return KindOf(Path.GetDirectoryName(exe)!) == InstallKind.SingleFile
+                ? "The release has no exe to download."
+                : "The release has no framework-dependent zip to update this folder from.";
         if (r.ChecksumsUrl == null) return "The release has no SHA256SUMS.txt to check the download against.";
         if (!CanWrite(Path.GetDirectoryName(exe)!)) return $"This program's folder ({Path.GetDirectoryName(exe)}) can't be written to without administrator rights.";
         return null;
@@ -95,12 +119,13 @@ public static class SelfUpdate
         Path.Combine(tempRoot ?? Path.GetTempPath(), "SurvivorsToolkit-update", version);
 
     /// <summary>
-    /// Downloads the release's exe into a staging folder and checks it against SHA256SUMS.txt. <paramref name="progress"/>
-    /// gets 0-100. Throws with a readable message when anything is wrong; nothing is changed until <see cref="HandOff"/>.
+    /// Downloads the release's file for <paramref name="kind"/> (the exe, or the zip, which is unpacked) into a staging
+    /// folder and checks it against SHA256SUMS.txt. <paramref name="progress"/> gets 0-100. Throws with a readable
+    /// message when anything is wrong; nothing is changed until <see cref="HandOff"/>.
     /// </summary>
-    public static async Task<PreparedUpdate> PrepareAsync(ReleaseInfo r, IProgress<int>? progress, CancellationToken ct, HttpClient? http = null, string? tempRoot = null)
+    public static async Task<PreparedUpdate> PrepareAsync(ReleaseInfo r, InstallKind kind, IProgress<int>? progress, CancellationToken ct, HttpClient? http = null, string? tempRoot = null)
     {
-        var url = r.ExeUrl ?? throw new InvalidOperationException("The release has no exe to download.");
+        var url = AssetFor(r, kind) ?? throw new InvalidOperationException("The release has no download for this kind of install.");
         if (r.ChecksumsUrl == null) throw new InvalidOperationException("The release has no SHA256SUMS.txt to check the download against.");
         http ??= UpdateCheck.CreateClient(TimeSpan.FromMinutes(10));
 
@@ -117,9 +142,17 @@ public static class SelfUpdate
         var actual = Sha256Of(download);
         if (actual != expected)
             throw new InvalidDataException($"The download doesn't match its checksum (expected {expected[..12]}..., got {actual[..12]}...). Nothing was changed.");
-        var u = new PreparedUpdate(r.Version, staging);
-        File.Move(download, u.Exe);
-        var got = VersionOf(u.Exe);
+        var u = new PreparedUpdate(r.Version, staging, kind);
+        if (kind == InstallKind.SingleFile)
+            File.Move(download, u.Exe);
+        else
+        {
+            ZipFile.ExtractToDirectory(download, u.FilesDir); // refuses entries that would land outside the folder
+            File.Delete(download);
+            if (!File.Exists(u.Exe) || !File.Exists(Path.Combine(u.FilesDir, DllName)))
+                throw new InvalidDataException($"The downloaded zip doesn't hold {ExeName} and {DllName}.");
+        }
+        var got = VersionOf(kind == InstallKind.SingleFile ? u.Exe : Path.Combine(u.FilesDir, DllName));
         if (got != null && got != r.Version)
             throw new InvalidDataException($"The download says it is version {got}, not {r.Version}. Nothing was changed.");
         progress?.Report(100);
@@ -183,14 +216,69 @@ public static class SelfUpdate
         }
     }
 
+    /// <summary>
+    /// Copies every file of the folder build in <paramref name="src"/> over <paramref name="appDir"/>, keeping each one it
+    /// replaces as "&lt;name&gt;.update-old" until the next start. If any copy fails, the files already swapped are put back
+    /// and the error is thrown.
+    /// </summary>
+    public static void ApplyFolder(string src, string appDir)
+    {
+        var done = new List<(string Target, bool HadOld)>();
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(src, "*", SearchOption.AllDirectories))
+            {
+                var target = Path.Combine(appDir, Path.GetRelativePath(src, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                var hadOld = File.Exists(target);
+                if (hadOld) File.Move(target, target + OldSuffix, overwrite: true);
+                done.Add((target, hadOld));
+                File.Copy(file, target);
+            }
+        }
+        catch
+        {
+            for (var i = done.Count - 1; i >= 0; i--)
+            {
+                var (target, hadOld) = done[i];
+                try
+                {
+                    if (File.Exists(target)) File.Delete(target);
+                    if (hadOld) File.Move(target + OldSuffix, target);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* the .update-old copy is still there to restore by hand */ }
+            }
+            throw;
+        }
+    }
+
+    /// <summary>Undoes <see cref="ApplyFolder"/>: each file it replaced gets its ".update-old" copy back. False when that failed.</summary>
+    public static bool PutBackFolder(string src, string appDir)
+    {
+        var ok = true;
+        foreach (var file in Directory.EnumerateFiles(src, "*", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(appDir, Path.GetRelativePath(src, file));
+            try
+            {
+                if (File.Exists(target + OldSuffix)) File.Move(target + OldSuffix, target, overwrite: true);
+                else if (File.Exists(target)) File.Delete(target);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { ok = false; }
+        }
+        return ok;
+    }
+
     /// <summary>Deletes the "*.update-old" a previous update left next to <paramref name="exe"/>, retrying while the old process closes.</summary>
     public static int CleanUp(string exe, int attempts = 10)
     {
         var dir = Path.GetDirectoryName(exe)!;
+        // A standalone exe often sits in Downloads or on the desktop: only look next to it, not in every sub-folder.
+        var depth = KindOf(dir) == InstallKind.Folder ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var removed = 0;
         for (var i = 0; i < attempts; i++)
         {
-            var left = Directory.EnumerateFiles(dir, "*" + OldSuffix).ToList();
+            var left = Directory.EnumerateFiles(dir, "*" + OldSuffix, depth).ToList();
             if (left.Count == 0) break;
             foreach (var f in left)
                 try { File.Delete(f); removed++; } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
@@ -216,7 +304,7 @@ public static class SelfUpdate
     public static void HandOff(PreparedUpdate u, string target, string fromVersion, bool restart = true)
     {
         if (!File.Exists(u.Exe)) throw new FileNotFoundException("The downloaded update is no longer in " + u.StagingDir + ".", u.Exe);
-        var psi = new ProcessStartInfo(u.Exe) { UseShellExecute = false, WorkingDirectory = u.StagingDir };
+        var psi = new ProcessStartInfo(u.Exe) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(u.Exe)! };
         foreach (var a in FinishArgs(Environment.ProcessId, target, fromVersion, restart)) psi.ArgumentList.Add(a);
         Process.Start(psi)?.Dispose();
     }
@@ -245,17 +333,26 @@ public static class SelfUpdate
         if (ParseFinishArgs(args) is not { } parsed) { fail("The update was started without its details."); return 2; }
         var (pid, target, fromVersion, restart) = parsed;
         var self = Environment.ProcessPath ?? throw new InvalidOperationException("No program path.");
+        var selfDir = Path.GetDirectoryName(self)!;
+        var appDir = Path.GetDirectoryName(target)!;
+        var kind = KindOf(selfDir);
         var version = UpdateCheck.CurrentVersion;
-        Log($"Installing {version} over {target} (replacing {fromVersion}, process {pid}).");
+        Log($"Installing {version} ({kind}) over {target} (replacing {fromVersion}, process {pid}).");
         try
         {
             WaitForExit(pid, TimeSpan.FromMinutes(2));
             // Renaming a running exe works on Windows, but that copy then crashes the next time .NET reads from it:
             // wait until nothing has it open.
             WaitUntilFree(target, TimeSpan.FromMinutes(2));
+            if (kind == InstallKind.Folder) WaitUntilFree(Path.Combine(appDir, DllName), TimeSpan.FromSeconds(30));
             for (var i = 1; ; i++)
             {
-                try { Apply(self, target); break; }
+                try
+                {
+                    if (kind == InstallKind.SingleFile) Apply(self, target);
+                    else ApplyFolder(selfDir, appDir);
+                    break;
+                }
                 catch (Exception e) when (i < 20 && e is IOException or UnauthorizedAccessException) { Thread.Sleep(500); }
             }
         }
@@ -286,7 +383,8 @@ public static class SelfUpdate
             var back = false;
             try
             {
-                if (File.Exists(target + OldSuffix)) { File.Move(target + OldSuffix, target, overwrite: true); back = true; }
+                if (kind == InstallKind.Folder) back = PutBackFolder(selfDir, appDir);
+                else if (File.Exists(target + OldSuffix)) { File.Move(target + OldSuffix, target, overwrite: true); back = true; }
                 if (back && restart) Process.Start(new ProcessStartInfo(target) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(target)! })?.Dispose();
             }
             catch (Exception e2) when (e2 is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { }

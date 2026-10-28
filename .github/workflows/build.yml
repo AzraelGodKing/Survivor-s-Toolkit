@@ -1,4 +1,4 @@
-# Builds and tests Survivor's Toolkit and uploads a single-file exe as an artifact.
+# Builds and tests Survivor's Toolkit and uploads a single-file exe and a Setup.exe as artifacts.
 # Runs on every push to main and test (so each PR merged into test gets a build), and on pull requests into them.
 name: Build
 
@@ -41,4 +41,19 @@ jobs:
         with:
           name: SurvivorsToolkit-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.branch }}-${{ steps.meta.outputs.sha }}-win-x64
           path: publish/SurvivorsToolkit.exe
+          if-no-files-found: error
+      # The same Setup.exe the Release workflow builds (see AppUpdates.cs), so a broken installer shows up before a release.
+      - name: Setup.exe
+        run: |
+          dotnet publish src/SurvivorsToolkit/SurvivorsToolkit.csproj -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o out/velopack
+          dotnet tool install -g vpk --version 1.2.161
+          $icon = ([xml](Get-Content src/SurvivorsToolkit/SurvivorsToolkit.csproj)).Project.PropertyGroup.ApplicationIcon | Where-Object { $_ } | Select-Object -First 1
+          $iconArgs = if ($icon) { @('--icon', (Join-Path src/SurvivorsToolkit $icon)) } else { @() }
+          vpk pack --packId AzraelGodKing.SurvivorsToolkit --packVersion "${{ steps.meta.outputs.version }}" --packDir out/velopack `
+            --mainExe SurvivorsToolkit.exe --packTitle "Survivor's Toolkit" --packAuthors Azrael --noPortable -o out/vpk @iconArgs
+          if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SurvivorsToolkit-${{ steps.meta.outputs.version }}-${{ steps.meta.outputs.branch }}-${{ steps.meta.outputs.sha }}-Setup
+          path: out/vpk/AzraelGodKing.SurvivorsToolkit-win-Setup.exe
           if-no-files-found: error

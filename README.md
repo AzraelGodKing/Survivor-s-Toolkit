@@ -10,6 +10,22 @@ It finds the game through your Steam libraries (or a folder you pick) and reads 
 loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothing is changed until you press
 **Save to game**, and nothing is changed while the game is running.
 
+## Download
+
+Each [release](https://github.com/AzraelGodKing/Survivor-s-Toolkit/releases) has three ways to get it, the same as
+ModWright:
+
+- `SurvivorsToolkit-<version>-Setup.exe`: installs the app for your Windows user (no administrator rights) with Start
+  menu and desktop shortcuts, and keeps it up to date the way most desktop apps do: a separate updater
+  ([Velopack](https://velopack.io)) swaps in the new version after the app has closed, downloading only what changed.
+  Recommended. Uninstall it from Windows' **Installed apps**; your settings stay in `%LocalAppData%\SurvivorsToolkit`.
+- `SurvivorsToolkit-<version>-win-x64.exe`: a single self-contained exe; no .NET install needed.
+- `SurvivorsToolkit-<version>-win-x64-framework-dependent.zip`: a small folder build that needs the
+  [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Use it if Windows or your antivirus
+  refuses to launch the large single-file exe.
+
+All three update themselves (see **Updates** below).
+
 ## Using it
 
 - **Mods:** tick a mod to enable it. **Save to game** (Ctrl+S) moves unticked mods to a `Mods-disabled` folder next
@@ -129,15 +145,17 @@ loads them: the game's own `Mods` folder and `%AppData%\7DaysToDie\Mods`. Nothin
   are installed, EasyAntiCheat and launch options.
 
 - **Updates:** at start-up the app asks GitHub for a newer release and offers **Update now**, **Release notes** or
-  **Later**, with a box to stop reminding you about that version. **Update now** downloads the new exe and checks it
-  against the release's `SHA256SUMS.txt`, then offers **Restart now** or **When I close the app**; until it is
-  installed, a **Restart now** link at the bottom of the window says it is ready. The old exe is kept as
-  `<name>.update-old` until the next start, and put back if Windows (or antivirus) won't run the new one. With
+  **Later**, with a box to stop reminding you about that version. **Update now** downloads the new version and checks it
+  against the release's checksums, then offers **Restart now** or **When I close the app**; until it is
+  installed, a **Restart now** link at the bottom of the window says it is ready. A copy installed with the
+  Setup.exe is updated by Velopack's updater once the app has closed. The standalone exe and the zip build update
+  themselves from the release's exe or zip: the old files are kept as `<name>.update-old` until the next start, and
+  put back if Windows (or antivirus) won't run the new one. With
   **Options > About > Download new versions by themselves** on, a new version is downloaded in the background and
   installed when you close the app, without asking. After an update the changes since your version are shown once
   (from `CHANGELOG.md`, built into the app); **What's new** shows them all. Only GitHub's public list of releases is
-  read. Turn the check off, or **Check now**, under **Options > About**. Only the single-file exe updates itself; a
-  copy that can't (a folder it can't write to, or a `dotnet build`) offers **Download** through the browser instead.
+  read. Turn the check off, or **Check now**, under **Options > About**. A copy that can't update itself (a folder
+  it can't write to, or `dotnet run`) offers **Download** through the browser instead.
 
 Settings, profiles (the `modlists` folder) and backups are in `%LocalAppData%\SurvivorsToolkit`.
 
@@ -182,8 +200,10 @@ On `test`, bump `<Version>` in `Directory.Build.props` and add a `## <version>` 
 `test` is ready, run **Promote test and release** (Actions tab; tick **dry_run** to only check and test). It merges
 `main` into `test` if `test` doesn't already contain it, runs the tests, fast-forwards `main` to `test`, tags it
 `v<version>` and leaves `test` at the same commit, all in one push. The tag starts the **Release** workflow, which
-refuses a version with no changelog section, tests, publishes `SurvivorsToolkit-<version>-win-x64.exe` (ReadyToRun,
-so it starts quickly) and `SHA256SUMS.txt`, and creates the release `v<version>` with that section as its notes, which
+refuses a version with no changelog section, tests, publishes the Setup.exe with its Velopack update packages
+(`*.nupkg`, `releases.win.json`, `assets.win.json`, `RELEASES`; a delta from the previous release when there is one),
+`SurvivorsToolkit-<version>-win-x64.exe`, the framework-dependent zip (all ReadyToRun, so they start quickly) and
+`SHA256SUMS.txt`, and creates the release `v<version>` with that section as its notes, which
 is what the app's update check looks for. The same section is what the app shows once after updating to that version.
 A version with a `-` (such as `0.4.0-beta.1`) becomes a pre-release, which the update check skips.
 

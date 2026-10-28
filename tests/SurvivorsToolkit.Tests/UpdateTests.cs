@@ -7,6 +7,8 @@ public class UpdateCheckTests
           "html_url": "https://github.com/x/{{tag}}", "body": "{{body}}",
           "assets": [
             { "name": "SurvivorsToolkit-{{tag[1..]}}-win-x64.exe", "browser_download_url": "https://dl/{{tag}}/app.exe" },
+            { "name": "SurvivorsToolkit-{{tag[1..]}}-win-x64-framework-dependent.zip", "browser_download_url": "https://dl/{{tag}}/app.zip" },
+            { "name": "SurvivorsToolkit-{{tag[1..]}}-Setup.exe", "browser_download_url": "https://dl/{{tag}}/Setup.exe" },
             { "name": "SHA256SUMS.txt", "browser_download_url": "https://dl/{{tag}}/SHA256SUMS.txt" } ] }
         """;
 
@@ -24,6 +26,8 @@ public class UpdateCheckTests
         Assert.NotNull(r);
         Assert.Equal("0.10.0", r!.Version);
         Assert.Equal("https://dl/v0.10.0/app.exe", r.ExeUrl);
+        Assert.Equal("https://dl/v0.10.0/app.zip", r.ZipUrl);
+        Assert.Equal("https://dl/v0.10.0/Setup.exe", r.SetupUrl);
         Assert.Equal("https://dl/v0.10.0/SHA256SUMS.txt", r.ChecksumsUrl);
         Assert.Equal("notes", r.Notes);
     }
@@ -96,8 +100,79 @@ public class SelfUpdateTests
     public void SaysWhyItCantUpdate()
     {
         var r = new ReleaseInfo("1.0.0", "page", null, "sums");
-        Assert.Contains("isn't the single-file exe", SelfUpdate.CannotUpdateReason(r, null));
+        Assert.Contains("isn't run from its exe", SelfUpdate.CannotUpdateReason(r, null));
         Assert.Contains("no exe", SelfUpdate.CannotUpdateReason(r, "C:/x/SurvivorsToolkit.exe"));
+    }
+
+    [Fact]
+    public void AFolderBuildUpdatesFromTheZip()
+    {
+        using var g = new FakeGame();
+        Directory.CreateDirectory(g.Root);
+        var exe = Path.Combine(g.Root, SelfUpdate.ExeName);
+        File.WriteAllText(exe, "");
+        Assert.Equal(InstallKind.SingleFile, SelfUpdate.KindOf(g.Root));
+        File.WriteAllText(Path.Combine(g.Root, "SurvivorsToolkit.dll"), "");
+        Assert.Equal(InstallKind.Folder, SelfUpdate.KindOf(g.Root));
+
+        var r = new ReleaseInfo("1.0.0", "page", "exe", "sums");
+        Assert.Contains("framework-dependent zip", SelfUpdate.CannotUpdateReason(r, exe));
+        Assert.Null(SelfUpdate.CannotUpdateReason(r with { ZipUrl = "zip" }, exe));
+        Assert.Equal("zip", SelfUpdate.AssetFor(r with { ZipUrl = "zip" }, InstallKind.Folder));
+    }
+
+    [Fact]
+    public void ApplyFolderKeepsTheOldFilesAndPutBackRestoresThem()
+    {
+        using var g = new FakeGame();
+        var app = Path.Combine(g.Root, "app");
+        var src = Path.Combine(g.Root, "new");
+        Directory.CreateDirectory(app);
+        Directory.CreateDirectory(Path.Combine(src, "runtimes"));
+        File.WriteAllText(Path.Combine(app, "SurvivorsToolkit.dll"), "old");
+        File.WriteAllText(Path.Combine(src, "SurvivorsToolkit.dll"), "new");
+        File.WriteAllText(Path.Combine(src, "runtimes", "extra.dll"), "added");
+
+        SelfUpdate.ApplyFolder(src, app);
+        Assert.Equal("new", File.ReadAllText(Path.Combine(app, "SurvivorsToolkit.dll")));
+        Assert.Equal("added", File.ReadAllText(Path.Combine(app, "runtimes", "extra.dll")));
+        Assert.Equal("old", File.ReadAllText(Path.Combine(app, "SurvivorsToolkit.dll" + SelfUpdate.OldSuffix)));
+
+        Assert.True(SelfUpdate.PutBackFolder(src, app));
+        Assert.Equal("old", File.ReadAllText(Path.Combine(app, "SurvivorsToolkit.dll")));
+        Assert.False(File.Exists(Path.Combine(app, "runtimes", "extra.dll")));
+    }
+
+    [Fact]
+    public async Task PrepareUnpacksAndChecksTheZip()
+    {
+        using var g = new FakeGame();
+        Directory.CreateDirectory(g.Root);
+        var zip = Path.Combine(g.Root, "build.zip");
+        using (var a = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
+            foreach (var name in new[] { SelfUpdate.ExeName, "SurvivorsToolkit.dll" })
+                using (var w = new StreamWriter(a.CreateEntry(name).Open())) w.Write(name);
+        var bytes = File.ReadAllBytes(zip);
+        const string zipName = "SurvivorsToolkit-1.0.0-win-x64-framework-dependent.zip";
+        var http = new HttpClient(new Serve(new()
+        {
+            ["https://dl/SHA256SUMS.txt"] = System.Text.Encoding.ASCII.GetBytes($"{SelfUpdate.Sha256Of(zip)}  {zipName}\n"),
+            ["https://dl/" + zipName] = bytes,
+        }));
+        var r = new ReleaseInfo("1.0.0", "page", null, "https://dl/SHA256SUMS.txt", ZipUrl: "https://dl/" + zipName);
+
+        var u = await SelfUpdate.PrepareAsync(r, InstallKind.Folder, null, CancellationToken.None, http, g.Root);
+        Assert.Equal(InstallKind.Folder, u.Kind);
+        Assert.Equal(SelfUpdate.ExeName, File.ReadAllText(u.Exe));
+        Assert.True(File.Exists(Path.Combine(u.FilesDir, "SurvivorsToolkit.dll")));
+    }
+
+    sealed class Serve(Dictionary<string, byte[]> files) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct) =>
+            Task.FromResult(files.TryGetValue(req.RequestUri!.ToString(), out var b)
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(b) }
+                : new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
     }
 }
 

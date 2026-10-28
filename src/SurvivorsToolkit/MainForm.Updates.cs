@@ -10,8 +10,8 @@ public sealed partial class MainForm
 {
     readonly LinkLabel _updateReady = new() { AutoSize = true, LinkBehavior = LinkBehavior.HoverUnderline, Visible = false, Margin = new Padding(16, 0, 0, 0), UseMnemonic = false };
     bool _checkingUpdate, _restartAfterUpdate;
-    /// <summary>A downloaded, checked update, and the exe it replaces; installed when the window closes.</summary>
-    (PreparedUpdate Update, string Exe)? _pendingUpdate;
+    /// <summary>A downloaded, checked update; installed when the window closes.</summary>
+    PendingUpdate? _pendingUpdate;
 
     /// <summary>
     /// Asks GitHub for a newer version. <paramref name="quiet"/> (at start-up) says nothing when there is none or GitHub
@@ -34,10 +34,9 @@ public sealed partial class MainForm
             }
             if (quiet && r.Version == _s.SkippedVersion) return;
 
-            var exe = SelfUpdate.RunningExe();
-            if (quiet && _s.AutoUpdate && exe != null && SelfUpdate.CannotUpdateReason(r, exe) == null)
+            if (quiet && _s.AutoUpdate && AppUpdates.CannotUpdateReason(r) == null)
             {
-                try { SetPendingUpdate(await SelfUpdate.PrepareAsync(r, null, CancellationToken.None), exe); }
+                try { SetPendingUpdate(await AppUpdates.DownloadAsync(r, null, CancellationToken.None)); }
                 catch (Exception e) when (e is HttpRequestException or IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException or TaskCanceledException)
                 {
                     ShowNote($"Survivor's Toolkit {r.Version} is out, but it couldn't be downloaded by itself: {e.Message} Options > About > Check now tries again.", Tone.Warn);
@@ -52,19 +51,19 @@ public sealed partial class MainForm
                 _s.SkippedVersion = f.SkipThisVersion ? r.Version : null;
                 SaveSettings();
             }
-            if (f.Prepared is { } u && exe != null)
+            if (f.Prepared is { } u)
             {
-                SetPendingUpdate(u, exe);
+                SetPendingUpdate(u);
                 if (f.RestartNow) RestartToUpdate();
             }
         }
         finally { _checkingUpdate = false; }
     }
 
-    void SetPendingUpdate(PreparedUpdate u, string exe)
+    void SetPendingUpdate(PendingUpdate u)
     {
         if (IsDisposed) return;
-        _pendingUpdate = (u, exe);
+        _pendingUpdate = u;
         _updateReady.Text = $"Version {u.Version} is downloaded and installs when you close the app.  Restart now";
         _updateReady.LinkArea = new LinkArea(_updateReady.Text.Length - "Restart now".Length, "Restart now".Length);
         _updateReady.Visible = true;
@@ -85,11 +84,11 @@ public sealed partial class MainForm
     /// </summary>
     void InstallPendingUpdate(bool restart)
     {
-        if (_pendingUpdate is not { } pending) return;
-        var (u, exe) = pending;
+        if (_pendingUpdate is not { } u) return;
         _pendingUpdate = null;
-        try { SelfUpdate.HandOff(u, exe, UpdateCheck.CurrentVersion, restart); }
-        catch (Exception e) when (e is IOException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        try { u.Install(UpdateCheck.CurrentVersion, restart); }
+        // Velopack throws its own exception types too; the window is closing, so any failure is only reported.
+        catch (Exception e)
         {
             Error(null, $"Couldn't install Survivor's Toolkit {u.Version}: {e.Message}\n\nNothing was changed. It is offered again the next time the app starts.");
         }

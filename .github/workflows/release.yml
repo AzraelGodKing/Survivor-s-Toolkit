@@ -1,5 +1,7 @@
-# Publishes Survivor's Toolkit as a GitHub release the app's self-update finds:
-#   tag v<Version>, with SurvivorsToolkit-<Version>-win-x64.exe and SHA256SUMS.txt.
+# Publishes Survivor's Toolkit as a GitHub release the app's self-update finds, the same files ModWright ships:
+#   tag v<Version>, with SurvivorsToolkit-<Version>-Setup.exe (installer, updates through Velopack) and its update
+#   packages, SurvivorsToolkit-<Version>-win-x64.exe (standalone), SurvivorsToolkit-<Version>-win-x64-framework-dependent.zip
+#   (small folder build) and SHA256SUMS.txt.
 # The version is <Version> in Directory.Build.props; bump it, and add a "## <Version>" section to CHANGELOG.md, before
 # releasing. That section is the release's notes and what the app shows once after updating to it.
 # Starts on a pushed tag like v1.2.0 ("Promote test and release" pushes one), which must match <Version>, or by hand
@@ -70,12 +72,43 @@ jobs:
         run: dotnet test SurvivorsToolkit.sln -c Release
       - name: Publish
         run: |
-          dotnet publish src/SurvivorsToolkit/SurvivorsToolkit.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true -o publish
-          $name = "SurvivorsToolkit-${{ steps.meta.outputs.version }}-win-x64.exe"
+          $app = "src/SurvivorsToolkit/SurvivorsToolkit.csproj"
+          # Self-contained single exe: runs without .NET installed.
+          dotnet publish $app -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishReadyToRun=true -o out/standalone
+          # Framework-dependent folder: small, for machines with the .NET 8 Desktop Runtime
+          # or where antivirus refuses large unsigned single-file exes.
+          dotnet publish $app -c Release -r win-x64 --no-self-contained -p:PublishReadyToRun=true -o out/portable
+          # Self-contained folder for the Setup.exe (Velopack, see AppUpdates.cs). A folder rather than one file: Velopack's
+          # Update.exe swaps whole folders, and updates between versions only download the files that changed.
+          dotnet publish $app -c Release -r win-x64 --self-contained -p:PublishReadyToRun=true -o out/velopack
+      # Builds the Setup.exe and the update packages that installed copies download. The previous release's packages are
+      # fetched first so this one can include a delta (only what changed).
+      - name: Setup.exe and update packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dotnet tool install -g vpk --version 1.2.161
+          vpk download github --repoUrl "https://github.com/${{ github.repository }}" --token $env:GH_TOKEN -o out/vpk
+          if ($LASTEXITCODE -ne 0) { Write-Output "No earlier Velopack release to make a delta from."; $global:LASTEXITCODE = 0 }
+          # The exe's own icon (<ApplicationIcon> in the csproj), when it has one, also goes on the Setup.exe.
+          $icon = ([xml](Get-Content src/SurvivorsToolkit/SurvivorsToolkit.csproj)).Project.PropertyGroup.ApplicationIcon | Where-Object { $_ } | Select-Object -First 1
+          $iconArgs = if ($icon) { @('--icon', (Join-Path src/SurvivorsToolkit $icon)) } else { @() }
+          vpk pack --packId AzraelGodKing.SurvivorsToolkit --packVersion "${{ steps.meta.outputs.version }}" --packDir out/velopack `
+            --mainExe SurvivorsToolkit.exe --packTitle "Survivor's Toolkit" --packAuthors Azrael --noPortable -o out/vpk @iconArgs
+          if ($LASTEXITCODE -ne 0) { throw "vpk pack failed" }
+          Get-ChildItem out/vpk
+      - name: Package
+        run: |
+          $v = "${{ steps.meta.outputs.version }}"
           New-Item -ItemType Directory -Force release | Out-Null
-          Copy-Item publish/SurvivorsToolkit.exe "release/$name"
-          $hash = (Get-FileHash "release/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -Path release/SHA256SUMS.txt -Value "$hash  $name" -NoNewline -Encoding ascii
+          # Velopack finds its packages by these exact names, so only the Setup.exe is renamed.
+          Copy-Item out/vpk/AzraelGodKing.SurvivorsToolkit-win-Setup.exe "release/SurvivorsToolkit-$v-Setup.exe"
+          Copy-Item "out/vpk/AzraelGodKing.SurvivorsToolkit-$v-*.nupkg", out/vpk/releases.win.json, out/vpk/assets.win.json, out/vpk/RELEASES release/
+          Copy-Item out/standalone/SurvivorsToolkit.exe "release/SurvivorsToolkit-$v-win-x64.exe"
+          Compress-Archive -Path out/portable/* -DestinationPath "release/SurvivorsToolkit-$v-win-x64-framework-dependent.zip"
+          $sums = Get-ChildItem release -File | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)" }
+          Set-Content -Path release/SHA256SUMS.txt -Value ($sums -join "`n") -NoNewline -Encoding ascii
+          Get-ChildItem release
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
